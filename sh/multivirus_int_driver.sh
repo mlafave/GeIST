@@ -17,7 +17,6 @@
 # Created: 8/9/13 (based on mlv_zf_int_driver.sh (as of 4/3/13, r31*), which was
 # based on tol2_driver_4.0.sh, which was based on ds_integration_driver.sh; all 
 # eventually owe ancestry to GeIST.sh)
-# Last modified: 8/9/13
 
 
 # The script assumes it's operating on an SGE cluster, submitted via qsub, but
@@ -70,22 +69,19 @@ fi
 ver=0
 
 # Check for the correct number of arguments
-if [ $# -lt 6 ]
-then echo "usage: $0 fastq_file barcode_ref bowtie_index cutoff name group_number [intermediate_on?]\n"
+if [ $# -lt 7 ]
+then echo "usage: $0 fastq_file barcode_ref bowtie_index insert cutoff name group_number [intermediate_on?]\n"
   exit 1   # General error
 fi
 
 fastq_file=$1
 barcode_ref=$2
 bowtie_index=$3
-cutoff=$4
-name=$5
-group_number=$6
-inter=$7
-
-# group_number=4
-
-# version=r32
+insert=$4
+cutoff=$5
+name=$6
+group_number=$7
+inter=$8
 
 # Make sure the fastq file exists & contains data:
 
@@ -97,6 +93,28 @@ then echo "$fastq_file is empty!"
   exit 1
 else
   echo "$fastq_file detected."
+fi
+
+# Set parameters for the indicated insert
+
+echo $insert | grep -i -q -w 'mlv' && insert=mlv
+echo $insert | grep -i -q -w 'hiv' && insert=hiv
+echo $insert | grep -i -q -w 'fv' && insert=fv
+echo $insert | grep -i -q -w 'foamy' && insert=fv
+
+if [ "$insert" = "mlv" ]
+then 
+   echo "MLV integrations will be mapped."
+   LTR=TGAAAGACCCCCGCTGACGGGTAGTCAATCACTC
+   footprint=4
+elif [ "$insert" = "hiv" ]
+then
+   echo "HIV integrations will be mapped."
+elif [ "$insert" = "fv" ]
+then
+   echo "Foamy Virus integrations will be mapped."
+else
+   throw_error "Insert $insert not recognized."
 fi
 
 # Check if intermediate files are to be deleted or not; default is to delete.
@@ -147,7 +165,7 @@ echo $name | grep -q [[:blank:]] && throw_error "'name' can't have blanks"
 
 # Make a working directory for the output of this script.
 
-workdir=$PWD/Workdir_${name}_$JOB_ID
+workdir=$PWD/Workdir_${name}_${insert}_$JOB_ID
 
 if [ -d $workdir ] ; then throw_error "$workdir already exists!"; fi
 
@@ -212,20 +230,25 @@ test_file revcom_${fastq_file}
 # First, remove reads with LTR+TTTG+GGGGCTC.  These reads are false positives;
 # they are amplification events off the 5' LTR into the primer binding domain of
 # the provirus, and do not provide accurate integration site information.  As
-# such, they are removed.
+# such, they are removed.  Note that this is only the case if looking for MLV.
 
 # '-e 0' indicates that no mismatches are allowed.
 
-echo ""
-echo "Performing LTR_F+TTTG+GGGGCTC removal with cutadapt..."
-
-cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -q 3 -m 11 -O 31 -e 0 \
- --untrimmed-output=noLTR+GGGGCTCrevcom_${fastq_file} \
- -o /dev/null revcom_${fastq_file}
-
-echo ""
-test_file noLTR+GGGGCTCrevcom_${fastq_file}
-
+if [ "$insert" = "mlv" ]
+then
+    echo ""
+    echo "Performing LTR_F+TTTG+GGGGCTC removal with cutadapt..."
+    
+    cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -q 3 -m 11 -O 31 \
+      -e 0 --untrimmed-output=noLTR+GGGGCTCrevcom_${fastq_file} \
+      -o /dev/null revcom_${fastq_file}
+   
+   echo ""
+   test_file noLTR+GGGGCTCrevcom_${fastq_file}
+   inputF=noLTR+GGGGCTCrevcom_${fastq_file}
+else
+   inputF=revcom_${fastq_file}
+fi
 
 # Set quality cutoff to 3 (to ignore reads if the LTR portion is of poor 
 # quality; that is, if the FASTQ quality is #)
@@ -237,15 +260,20 @@ test_file noLTR+GGGGCTCrevcom_${fastq_file}
 
 echo ""
 echo "Performing LTR_F detection with cutadapt..."
-cutadapt -a TGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -q 3 -m 11 -O 11 -e 0 \
+cutadapt -a ${LTR} -q 3 -m 11 -O 11 -e 0 \
  --untrimmed-output=/dev/null -o cut_LTRrevcom_${fastq_file} \
- noLTR+GGGGCTCrevcom_${fastq_file}
+ ${inputF}
 
 echo ""
 test_file cut_LTRrevcom_${fastq_file}
-rm noLTR+GGGGCTCrevcom_${fastq_file}
 
+# If the MLV intermediate was produced, remove it.
+if [ -f noLTR+GGGGCTCrevcom_${fastq_file} ]
+then
+   rm noLTR+GGGGCTCrevcom_${fastq_file} 
+fi
 
+echo ""
 echo "Flipping cutadapt output back to the original orientation..."
 cat cut_LTRrevcom_${fastq_file} | ~/Package_scripts/perl/rcFastq.pl > cut_LTR_F_${fastq_file}
 
@@ -389,27 +417,35 @@ test_file cut_linker_F_nodup_${fastq_file}
 
 # As before, first remove reads with LTR_R+TTTG+GGGGCTC.
 
-echo ""
-echo "Performing LTR_R+TTTG+GGGGCTC removal with cutadapt..."
-cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -q 3 -m 11 -O 31 -e 0 \
- --untrimmed-output=noLTR_R-GGGGCTC_${fastq_file} \
- -o /dev/null ../${fastq_file}
-
-test_file noLTR_R-GGGGCTC_${fastq_file}
-
+if [ "$insert" = "mlv" ]
+then
+   echo ""
+   echo "Performing LTR_R+TTTG+GGGGCTC removal with cutadapt..."
+   cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -q 3 -m 11 -O 31 \
+     -e 0 --untrimmed-output=noLTR_R-GGGGCTC_${fastq_file} \
+     -o /dev/null ../${fastq_file}
+   
+   test_file noLTR_R-GGGGCTC_${fastq_file}
+   
+   inputR=noLTR_R-GGGGCTC_${fastq_file}
+else
+   inputR=../${fastq_file}
+fi
 
 # Detect/trim actual LTR.
 
 echo ""
 echo "Performing LTR_R detection with cutadapt..."
-cutadapt -a TGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -q 3 -m 11 -O 11 -e 0 \
+cutadapt -a ${LTR} -q 3 -m 11 -O 11 -e 0 \
  --untrimmed-output=/dev/null -o cut_LTR_R_${fastq_file} \
- noLTR_R-GGGGCTC_${fastq_file}
+ ${inputR}
 
 test_file cut_LTR_R_${fastq_file}
 
-rm noLTR_R-GGGGCTC_${fastq_file}
-
+if [ -f noLTR_R-GGGGCTC_${fastq_file} ]
+then
+   rm noLTR_R-GGGGCTC_${fastq_file}
+fi
 
 # Concatenate LTR F and R together
 
@@ -848,30 +884,40 @@ rm ${fastq_file}_LTR_F_combo_pairs-with-p.fastq
 
 # First, remove LTR_R+TTTG+GGGGCTC.
 
-echo ""
-echo "Performing LTR_R+TTTG+GGGGCTC detection/removal with cutadapt..."
-cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -m 11 -O 25 -e 0 \
- --untrimmed-output=${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_noGGGGCTC.fastq \
- -o /dev/null ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR.fastq
-
-test_file ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_noGGGGCTC.fastq
-
-rm ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR.fastq
-
+if [ "$insert" = "mlv" ]
+then
+   echo ""
+   echo "Performing LTR_R+TTTG+GGGGCTC detection/removal with cutadapt..."
+   cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -m 11 -O 25 -e 0 \
+     --untrimmed-output=${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_noGGGGCTC.fastq \
+     -o /dev/null ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR.fastq
+   
+   test_file ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_noGGGGCTC.fastq
+   
+   pair_inputR=${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_noGGGGCTC.fastq
+   
+   #rm ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR.fastq
+else
+   pair_inputR=${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR.fastq
+fi
 
 # I avoided setting -e to 0; everything makes it through anyway, so not setting
 # it just means I'll get more accurate trims.
 
 echo ""
 echo "Performing LTR_R detection/trim with cutadapt..."
-cutadapt -a TGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -m 11 -O 11 \
+cutadapt -a ${LTR} -m 11 -O 11 \
  -o ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq \
- ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_noGGGGCTC.fastq
+ ${pair_inputR}
 
 test_file ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq
 
-rm ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R+TTTG.fastq
-rm ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_noGGGGCTC.fastq
+rm ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR.fastq
+# rm ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R+TTTG.fastq
+if [ -f ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_noGGGGCTC.fastq ]
+then
+   rm ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_noGGGGCTC.fastq
+fi
 
 # Use cutadapt to remove any read with LTR_F;  do not use -q.
 # I've lowered the -O (required overlap) from 20 to 14 to err on the side of 
@@ -892,7 +938,7 @@ rm ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq
 
 echo ""
 echo "Performing removal of reads with LTR_F with cutadapt..."
-cutadapt -a TGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -m 11 -O 11 \
+cutadapt -a ${LTR} -m 11 -O 11 \
 --untrimmed-output=revcom_${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R_noLTRF.fastq \
  -o /dev/null \
  revcom_${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq
@@ -974,7 +1020,7 @@ test_file cut_LTR_R_${fastq_file}_overlap_trim-F-link.fastq_pairs-with-p.fastq
 
 echo ""
 echo "Performing removal of p-reads with LTR_R with cutadapt..."
-cutadapt -a TGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -m 11 -O 11 \
+cutadapt -a ${LTR} -m 11 -O 11 \
  --untrimmed-output=${fastq_file}_LTR_R_pairs-with-p_noLTR-R.fastq \
  -o /dev/null \
   cut_LTR_R_${fastq_file}_overlap_trim-F-link.fastq_pairs-with-p.fastq
@@ -1012,26 +1058,37 @@ rm revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R.fastq
 
 # First, remove reads with LTR_F+TTTG+GGGGCTC.
 
-echo ""
-echo "Performing removal of LTR_F+TTTG+GGGGCTC with cutadapt..."
-cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -m 11 -O 22 -e 0 \
- --untrimmed-output=revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_noGGGGCTC.fastq \
- -o /dev/null revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF.fastq
-
-test_file revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_noGGGGCTC.fastq
-
-rm revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF.fastq
-
+if [ "$insert" = "mlv" ]
+then
+   echo ""
+   echo "Performing removal of LTR_F+TTTG+GGGGCTC with cutadapt..."
+   cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -m 11 -O 22 -e 0 \
+     --untrimmed-output=revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_noGGGGCTC.fastq \
+     -o /dev/null revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF.fastq
+   
+   test_file revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_noGGGGCTC.fastq
+   
+   pair_inputF=revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_noGGGGCTC.fastq
+   
+   # rm revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF.fastq
+else
+   pair_inputF=revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF.fastq
+fi
 
 echo ""
 echo "Performing trim of LTR_F with cutadapt..."
-cutadapt -a TGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -m 11 -O 11 \
+cutadapt -a ${LTR} -m 11 -O 11 \
  -o revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq \
- revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_noGGGGCTC.fastq
+ ${pair_inputF}
 
 test_file revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq
 
-rm revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_noGGGGCTC.fastq
+rm revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF.fastq
+
+if [ -f revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_noGGGGCTC.fastq ]
+then
+   rm revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_noGGGGCTC.fastq
+fi
 
 echo ""
 echo "Flipping cutadapt output back to the original orientation..."
@@ -1279,7 +1336,7 @@ echo "to the LTR (default is 4 bp, corresponding to a MLV integration site)."
 echo "bowtie_LTR_adjacent.pl says:"
 perl ~/Package_scripts/perl/bowtie_LTR_adjacent_v4.0.pl \
  LTR_F_temp cut_LTR_R_${fastq_file}_overlap_trim-F-link.fastq \
- ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc 4
+ ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc ${footprint}
 
 echo ""
 test_file ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent
@@ -1307,10 +1364,14 @@ rm ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent
 echo ""
 echo "***Step 15. Reduce bowtie output to one entry per fragment.***"
 
-echo ""
-echo "bowtie_single_frag_v1.0.pl says:"
-perl ~/Package_scripts/perl/bowtie_single_frag_v1.0.pl \
- ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent_sort
+# echo ""
+# echo "bowtie_single_frag_v1.0.pl says:"
+# perl ~/Package_scripts/perl/bowtie_single_frag_v1.0.pl \
+#  ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent_sort
+
+awk -v OFS="\t" '{base=substr($1, 1, length($1)-2); if(base != oldbase){print $1,$9,$3,$4}; oldbase=base}' \
+   ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent_sort \
+   > ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent_sort_singlefrag
 
 echo ""
 test_file ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent_sort_singlefrag
@@ -1370,7 +1431,7 @@ test_file ${fastq_file}_combo_split_grouped
 rm ${fastq_file}_combo_split
 
 
-# use awk to split into 4 parts
+# use awk to split into ${group_number} parts
 
 echo ""
 echo "Splitting into ${group_number} groups, and sorting..."
@@ -1379,9 +1440,16 @@ while
   [ $i -le ${group_number} ]
 do
   cat ${fastq_file}_combo_split_grouped | \
-  awk -v num="${i}" '$12 == num {print $3"\t"$4}' | \
-  sort -k1,1 -k2,2n | uniq -c > ${fastq_file}_combo_split_grouped_uniq_${i}
-  test_file ${fastq_file}_combo_split_grouped_uniq_${i}
+  awk -v num="${i}" '$12 == num && $2 == "+" {print $3"\t"$4}' | \
+  sort -k1,1 -k2,2n | uniq -c > ${fastq_file}_combo_split_grouped_plus_uniq_${i}
+  
+  cat ${fastq_file}_combo_split_grouped | \
+  awk -v num="${i}" '$12 == num && $2 == "-" {print $3"\t"$4}' | \
+  sort -k1,1 -k2,2n | uniq -c > ${fastq_file}_combo_split_grouped_minus_uniq_${i}
+  
+  test_file ${fastq_file}_combo_split_grouped_plus_uniq_${i}
+  test_file ${fastq_file}_combo_split_grouped_minus_uniq_${i}
+  
   i=$[ $i + 1 ]
 done
 
@@ -1404,9 +1472,17 @@ i=1
 while
   [ $i -le ${group_number} ]
 do
-  perl ~/Package_scripts/perl/remove_nearby_v3.0.pl ${fastq_file}_combo_split_grouped_uniq_${i} 5
-  test_file ${fastq_file}_combo_split_grouped_uniq_${i}.not_in_5
-  if [ "$keep" = "off" ]; then rm ${fastq_file}_combo_split_grouped_uniq_${i}; fi
+  perl ~/Package_scripts/perl/remove_nearby_v3.0.pl \
+    ${fastq_file}_combo_split_grouped_plus_uniq_${i} 5
+  perl ~/Package_scripts/perl/remove_nearby_v3.0.pl \
+    ${fastq_file}_combo_split_grouped_minus_uniq_${i} 5
+  
+  test_file ${fastq_file}_combo_split_grouped_plus_uniq_${i}.not_in_5
+  test_file ${fastq_file}_combo_split_grouped_minus_uniq_${i}.not_in_5
+  
+  if [ "$keep" = "off" ]; then rm ${fastq_file}_combo_split_grouped_plus_uniq_${i}; fi
+  if [ "$keep" = "off" ]; then rm ${fastq_file}_combo_split_grouped_minus_uniq_${i}; fi
+
   i=$[ $i + 1 ]
 done
 
@@ -1426,10 +1502,17 @@ i=1
 while
   [ $i -le ${group_number} ]
 do
-  awk -v cut="$cutoff" '$1 >= cut' ${fastq_file}_combo_split_grouped_uniq_${i}.not_in_5 > \
-  ${fastq_file}_combo_split_grouped_uniq_${i}.not_in_5_cutoff${cutoff}
-  test_file ${fastq_file}_combo_split_grouped_uniq_${i}.not_in_5_cutoff${cutoff}
-  if [ "$keep" = "off" ]; then rm ${fastq_file}_combo_split_grouped_uniq_${i}.not_in_5; fi
+  awk -v cut="$cutoff" '$1 >= cut' ${fastq_file}_combo_split_grouped_plus_uniq_${i}.not_in_5 > \
+    ${fastq_file}_combo_split_grouped_plus_uniq_${i}.not_in_5_cutoff${cutoff}
+  awk -v cut="$cutoff" '$1 >= cut' ${fastq_file}_combo_split_grouped_minus_uniq_${i}.not_in_5 > \
+    ${fastq_file}_combo_split_grouped_minus_uniq_${i}.not_in_5_cutoff${cutoff}
+  
+  test_file ${fastq_file}_combo_split_grouped_plus_uniq_${i}.not_in_5_cutoff${cutoff}
+  test_file ${fastq_file}_combo_split_grouped_minus_uniq_${i}.not_in_5_cutoff${cutoff}
+
+  if [ "$keep" = "off" ]; then rm ${fastq_file}_combo_split_grouped_plus_uniq_${i}.not_in_5; fi
+  if [ "$keep" = "off" ]; then rm ${fastq_file}_combo_split_grouped_minus_uniq_${i}.not_in_5; fi
+  
   i=$[ $i + 1 ]
 done
 
@@ -1446,13 +1529,16 @@ echo "***Step 19. Make a bowtie file of the remaining reads.***"
 
 echo ""
 echo "Combining the ${group_number} files into one, sorting..."
-cat ${fastq_file}_combo_split_grouped_uniq_*.not_in_5_cutoff${cutoff} | sort -k2,2 -k3,3n > \
- ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}
+cat ${fastq_file}_combo_split_grouped_plus_uniq_*.not_in_5_cutoff${cutoff} \
+   ${fastq_file}_combo_split_grouped_minus_uniq_*.not_in_5_cutoff${cutoff} | \
+   sort -k2,2 -k3,3n > \
+   ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}
 
 test_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}
 
 
-# Make island file
+# Make island file.  Note that entries from both strands will be printed for
+# a given site; this can be corrected a few lines later.
 
 echo ""
 echo "Making the 'island' file (modified Bowtie format)."
@@ -1465,7 +1551,6 @@ echo ""
 test_file ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent_sort_island
 
 if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent_sort; fi
-if [ "$keep" = "off" ]; then rm ${fastq_file}_combo_split_grouped_uniq_*.not_in_5_cutoff${cutoff}; fi
 
 
 # Rename file
@@ -1519,32 +1604,79 @@ rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cut
 
 # Use of notinx_to_bowtie, above, guarantees that the sites selected pass the 
 # cutoff in at least one barcode group.  Now, further reduce it to be a list 
-# of ONLY the barcode groups in which the site passes the cutoff.
+# of ONLY the barcode groups (and strands) in which the site passes the cutoff.
 
-# Combine all cutoff files into one; add barcode information
+# Split the island file by strand
+echo ""
+echo "Splitting the island file by strand..."
+awk '$9 == "+"' \
+   ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped \
+   > ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_plus
 
+awk '$9 == "-"' \
+   ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped \
+   > ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_minus
+
+test_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_plus
+test_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_minus
+
+
+# Print the sites that passed the cutoff AND the group to which they belong.
+# First, combine all cutoff files into two "stranded" files.
+echo ""
+echo "Combining cutoff files by appropriate strand..."
 i=1
 while 
   [ $i -le ${group_number} ]
 do 
-  awk -v i="$i" '{print $0"\t"i}' ${fastq_file}_combo_split_grouped_uniq_${i}.not_in_5_cutoff${cutoff} \
-   >> ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_group-info
+  awk -v i="$i" '{print $0"\t"i}' ${fastq_file}_combo_split_grouped_plus_uniq_${i}.not_in_5_cutoff${cutoff} \
+   >> ${fastq_file}_combo_split_grouped_plus_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_group-info
+  
+  awk -v i="$i" '{print $0"\t"i}' ${fastq_file}_combo_split_grouped_minus_uniq_${i}.not_in_5_cutoff${cutoff} \
+   >> ${fastq_file}_combo_split_grouped_minus_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_group-info
+  
   i=$[ $i + 1 ] 
 done
 
 echo ""
-test_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_group-info
+test_file ${fastq_file}_combo_split_grouped_plus_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_group-info
+test_file ${fastq_file}_combo_split_grouped_minus_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_group-info
+
+if [ "$keep" = "off" ]; then rm ${fastq_file}_combo_split_grouped_plus_uniq_*.not_in_5_cutoff${cutoff}; fi
+if [ "$keep" = "off" ]; then rm ${fastq_file}_combo_split_grouped_minus_uniq_*.not_in_5_cutoff${cutoff}; fi
+
+
+# Only keep the bowtie file entries that are the correct position for that group
+echo ""
+echo "Removing entries that failed to pass the cutoff for the group/strand..."
+perl ~/Zf_scripts/perl/bowtie_good-groups.pl \
+ ${fastq_file}_combo_split_grouped_plus_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_group-info \
+ ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_plus \
+ > ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_plus_good
 
 perl ~/Zf_scripts/perl/bowtie_good-groups.pl \
- ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_group-info \
- ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped \
- > ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_good
+ ${fastq_file}_combo_split_grouped_minus_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_group-info \
+ ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_minus \
+ > ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_minus_good
 
 echo ""
-test_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_good
+test_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_plus_good
+test_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_minus_good
 
 if [ "$keep" = "off" ]; then rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_group-info; fi
 if [ "$keep" = "off" ]; then rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped; fi
+
+echo ""
+echo "Combining the two strand files together..."
+cat ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_plus_good \
+  ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_minus_good \
+  | sort -k3,3 -k4,4n > ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_good
+
+test_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_good
+
+if [ "$keep" = "off" ]; then rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_plus_good; fi
+if [ "$keep" = "off" ]; then rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_minus_good; fi
+
 
 ################################################################################
 # Step 20.
@@ -1575,22 +1707,22 @@ join -1 4 -2 1 ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_
   | awk '{print $1"\t"$2"\t"$2+4"\t"$4"\t"1000"\t"$3"\t"$2"\t"$2+4}' \
   | sort -k1,1 -k2,2n \
   | awk 'BEGIN{print "track name=mlv_integ type=bed itemRgb=Off db=danRer7"}{print}' \
-  > ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_job${JOB_ID}.bed
+  > ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_${insert}_job${JOB_ID}.bed
 
 
 echo ""
-test_file ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_job${JOB_ID}.bed
+test_file ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_${insert}_job${JOB_ID}.bed
 
 if [ "$keep" = "off" ]; then rm ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_job${JOB_ID}_demibed; fi
 if [ "$keep" = "off" ]; then rm ${barcode_ref}_${group_number}_groups_barsort; fi
 
 
 echo ""
-echo "Adding job number to the remaining 'island' files..."
+echo "Adding insert and job number to the remaining 'island' files..."
 mv ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodesum \
- ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodesum_job${JOB_ID}
+ ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodesum_${insert}_job${JOB_ID}
 mv ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_good \
- ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_job${JOB_ID}
+ ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_${insert}_job${JOB_ID}
 
 
 ################################################################################
@@ -1642,51 +1774,51 @@ echo "***Step 21. Clean up files.***"
 echo ""
 echo "Moving output BED file out of the temporary directory..."
 if
-  [ -e ../${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_job${JOB_ID}.bed ]
+  [ -e ../${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_${insert}_job${JOB_ID}.bed ]
 then
-  throw_error "Can't move ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_job${JOB_ID}.bed; a file with that name already exists in parent directory!"
+  throw_error "Can't move ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_${insert}_job${JOB_ID}.bed; a file with that name already exists in parent directory!"
 else
-  mv ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_job${JOB_ID}.bed .. || throw_error "Didn't move ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_job${JOB_ID}.bed!"
-  echo "${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_job${JOB_ID}.bed moved to parent directory."
+  mv ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_${insert}_job${JOB_ID}.bed .. || throw_error "Didn't move ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_${insert}_job${JOB_ID}.bed!"
+  echo "${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_${insert}_job${JOB_ID}.bed moved to parent directory."
 fi
 
 # Put the island files (information on all remaining reads, as well as barcode
 # count) into a tarball, and move it to the parent directory
 
-tar czf ${fastq_file}_${name}_islandfiles_${JOB_ID}.tgz \
- ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodesum_job${JOB_ID} \
- ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_job${JOB_ID}
+tar czf ${fastq_file}_${name}_islandfiles_${insert}_${JOB_ID}.tgz \
+ ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodesum_${insert}_job${JOB_ID} \
+ ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_${insert}_job${JOB_ID}
 
-test_file ${fastq_file}_${name}_islandfiles_${JOB_ID}.tgz
+test_file ${fastq_file}_${name}_islandfiles_${insert}_${JOB_ID}.tgz
 
 echo ""
-echo "Moving ${fastq_file}_${name}_islandfiles_${JOB_ID}.tgz out of the temporary directory..."
+echo "Moving ${fastq_file}_${name}_islandfiles_${insert}_${JOB_ID}.tgz out of the temporary directory..."
 if
-  [ -e ../${fastq_file}_${name}_islandfiles_${JOB_ID}.tgz ]
+  [ -e ../${fastq_file}_${name}_islandfiles_${insert}_${JOB_ID}.tgz ]
 then
-  throw_error "Can't move ${fastq_file}_${name}_islandfiles_${JOB_ID}.tgz; a file with that name already exists in parent directory!"
+  throw_error "Can't move ${fastq_file}_${name}_islandfiles_${insert}_${JOB_ID}.tgz; a file with that name already exists in parent directory!"
 else
-  mv ${fastq_file}_${name}_islandfiles_${JOB_ID}.tgz .. || throw_error "Didn't move ${fastq_file}_${name}_islandfiles_${JOB_ID}.tgz!"
-  echo "${fastq_file}_${name}_islandfiles_${JOB_ID}.tgz moved to parent directory."
+  mv ${fastq_file}_${name}_islandfiles_${insert}_${JOB_ID}.tgz .. || throw_error "Didn't move ${fastq_file}_${name}_islandfiles_${insert}_${JOB_ID}.tgz!"
+  echo "${fastq_file}_${name}_islandfiles_${insert}_${JOB_ID}.tgz moved to parent directory."
 fi
 
-rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodesum_job${JOB_ID}
-rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_job${JOB_ID}
+rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodesum_${insert}_job${JOB_ID}
+rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_${insert}_job${JOB_ID}
 
 
 echo ""
 echo "Storing any remaining files in a tarball, moving it out of the working directory..."
 if [ "$keep" = "on" ] 
 then 
-   tar czf ${fastq_file}_${name}_intermediatefiles_$JOB_ID.tgz *${fastq_file}* 
-   test_file ${fastq_file}_${name}_intermediatefiles_$JOB_ID.tgz
+   tar czf ${fastq_file}_${name}_intermediatefiles_${insert}_$JOB_ID.tgz *${fastq_file}* 
+   test_file ${fastq_file}_${name}_intermediatefiles_${insert}_$JOB_ID.tgz
    if
-      [ -e ../${fastq_file}_${name}_intermediatefiles_$JOB_ID.tgz ]
+      [ -e ../${fastq_file}_${name}_intermediatefiles_${insert}_$JOB_ID.tgz ]
    then
-      throw_error "Can't move ${fastq_file}_${name}_intermediatefiles_$JOB_ID.tgz; it already exists in parent directory!"
+      throw_error "Can't move ${fastq_file}_${name}_intermediatefiles_${insert}_$JOB_ID.tgz; it already exists in parent directory!"
    else
-      mv ${fastq_file}_${name}_intermediatefiles_$JOB_ID.tgz ..
-      echo "${fastq_file}_${name}_intermediatefiles_$JOB_ID.tgz moved to parent directory."
+      mv ${fastq_file}_${name}_intermediatefiles_${insert}_$JOB_ID.tgz ..
+      echo "${fastq_file}_${name}_intermediatefiles_${insert}_$JOB_ID.tgz moved to parent directory."
    fi
 fi
 
