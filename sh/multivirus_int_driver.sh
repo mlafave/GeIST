@@ -70,7 +70,7 @@ ver=0
 
 # Check for the correct number of arguments
 if [ $# -lt 7 ]
-then echo "usage: $0 fastq_file barcode_ref bowtie_index insert cutoff name group_number [intermediate_on?]\n"
+then echo "usage: $0 fastq_file barcode_ref bowtie_index_path insert cutoff name group_number [intermediate_on?]\n"
   exit 1   # General error
 fi
 
@@ -139,13 +139,13 @@ fi
 function verify_index
 {
  if 
-   test ! -e ~/indexes/$1
+   test ! -e $1
  then 
-   throw_error "Bowtie index ~/indexes/$1 doesn't exist!"
+   throw_error "Bowtie index $1 doesn't exist!"
  elif 
-   test ! -s ~/indexes/$1
+   test ! -s $1
  then 
-   throw_error "Bowtie index ~/indexes/$1 is empty!"
+   throw_error "Bowtie index $1 is empty!"
  else
    echo "Index $1 verified."
  fi
@@ -154,10 +154,10 @@ function verify_index
 echo ""
 verify_index ${bowtie_index}.1.ebwt
 verify_index ${bowtie_index}.2.ebwt
-verify_index ${bowtie_index}.3.ebwt
-verify_index ${bowtie_index}.4.ebwt
 verify_index ${bowtie_index}.rev.1.ebwt
 verify_index ${bowtie_index}.rev.2.ebwt
+# .3.ebwt and .4.ebwt aren't used for single-end alignment, so it doesn't matter
+# if they're there.
 
 # Verify that the name does not have blanks
 
@@ -1181,9 +1181,9 @@ echo "***Step 12. Align -q and non-q reads with bowtie.***"
 # memory for Bowtie, and -t reports timing statistics.
 
 echo ""
-echo "Aligning non-p reads to ../indexes/${bowtie_index}..."
+echo "Aligning non-p reads to ${bowtie_index}..."
 echo "Bowtie says:"
-bowtie -t -a -m 1 --best --strata --chunkmbs 256 ~/indexes/${bowtie_index} \
+bowtie -t -a -m 1 --best --strata --chunkmbs 256 ${bowtie_index} \
  ${fastq_file}_non-p ${fastq_file}_non-p_bowtie_strata
 
 echo ""
@@ -1193,9 +1193,9 @@ if [ "$keep" = "off" ]; then rm ${fastq_file}_non-p; fi
 
 # Repeat for the p-pairs file.
 echo ""
-echo "Aligning p-reads to ../indexes/${bowtie_index}..."
+echo "Aligning p-reads to ${bowtie_index}..."
 echo "Bowtie says:"
-bowtie -t -a -m 1 --best --strata --chunkmbs 256 ~/indexes/${bowtie_index} \
+bowtie -t -a -m 1 --best --strata --chunkmbs 256 ${bowtie_index} \
  ${fastq_file}_p ${fastq_file}_p_bowtie_strata
 
 echo ""
@@ -1704,7 +1704,7 @@ test_file ${barcode_ref}_${group_number}_groups_barsort
 join -1 4 -2 1 ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_job${JOB_ID}_demibed \
   ${barcode_ref}_${group_number}_groups_barsort \
   | awk -v OFS="\t" '{print $2,$3,$4,$6}' | sort | uniq \
-  | awk '{print $1"\t"$2"\t"$2+4"\t"$4"\t"1000"\t"$3"\t"$2"\t"$2+4}' \
+  | awk -v footprint="$footprint" '{print $1"\t"$2"\t"$2+footprint"\t"$4"\t"1000"\t"$3"\t"$2"\t"$2+footprint}' \
   | sort -k1,1 -k2,2n \
   | awk 'BEGIN{print "track name=mlv_integ type=bed itemRgb=Off db=danRer7"}{print}' \
   > ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_${insert}_job${JOB_ID}.bed
