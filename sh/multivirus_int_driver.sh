@@ -133,32 +133,6 @@ else
    echo "Intermediate files will be deleted."
 fi
 
-# Check to make sure certain assumptions are met: for example, that the bowtie 
-# index you'll need actually exists, and is in the right place.
-
-function verify_index
-{
- if 
-   test ! -e $1
- then 
-   throw_error "Bowtie index $1 doesn't exist!"
- elif 
-   test ! -s $1
- then 
-   throw_error "Bowtie index $1 is empty!"
- else
-   echo "Index $1 verified."
- fi
-}
-
-echo ""
-verify_index ${bowtie_index}.1.ebwt
-verify_index ${bowtie_index}.2.ebwt
-verify_index ${bowtie_index}.rev.1.ebwt
-verify_index ${bowtie_index}.rev.2.ebwt
-# .3.ebwt and .4.ebwt aren't used for single-end alignment, so it doesn't matter
-# if they're there.
-
 # Verify that the name does not have blanks
 
 echo $name | grep -q [[:blank:]] && throw_error "'name' can't have blanks"
@@ -180,11 +154,43 @@ mkdir $workdir
 # mv $barcode_ref $workdir
 # mv ${barcode_ref}_${group_number}_groups $workdir
 
+echo ""
+echo "Entering working directory ${workdir}..."
 cd $workdir
 
 # if [ ! -f $fastq_file ] ; then throw_error "$fastq_file wasn't moved to workdir!"; fi
 # if [ ! -f ${barcode_ref} ] ; then throw_error "${barcode_ref} wasn't moved to workdir!"; fi
 # if [ ! -f ${barcode_ref}_${group_number}_groups ] ; then throw_error "${barcode_ref}_${group_number}_groups wasn't moved to workdir!"; fi
+
+# Check to make sure certain assumptions are met: for example, that the bowtie 
+# index you'll need actually exists, and is in the right place.
+
+function verify_index
+{
+ if 
+   test ! -e $1
+ then 
+   cd ..
+   rmdir $workdir
+   throw_error "Bowtie index $1 doesn't exist!"
+ elif 
+   test ! -s $1
+ then 
+   cd ..
+   rmdir $workdir
+   throw_error "Bowtie index $1 is empty!"
+ else
+   echo "Index $1 verified."
+ fi
+}
+
+echo ""
+verify_index ${bowtie_index}.1.ebwt
+verify_index ${bowtie_index}.2.ebwt
+verify_index ${bowtie_index}.rev.1.ebwt
+verify_index ${bowtie_index}.rev.2.ebwt
+# .3.ebwt and .4.ebwt aren't used for single-end alignment, so it doesn't matter
+# if they're there.
 
 ################################################################################
 # Step 1.
