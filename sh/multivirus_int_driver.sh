@@ -162,6 +162,11 @@ cd $workdir
 # if [ ! -f ${barcode_ref} ] ; then throw_error "${barcode_ref} wasn't moved to workdir!"; fi
 # if [ ! -f ${barcode_ref}_${group_number}_groups ] ; then throw_error "${barcode_ref}_${group_number}_groups wasn't moved to workdir!"; fi
 
+# Determine path to the perl scripts
+
+# Adjust for relative paths
+bowtie_index=`echo $bowtie_index | awk '{ if($1 ~ /^\//){print}else{print "../"$1} }'`
+
 # Check to make sure certain assumptions are met: for example, that the bowtie 
 # index you'll need actually exists, and is in the right place.
 
@@ -223,7 +228,7 @@ echo "***Step 2: Make initial cutadapt files.***"
 
 echo ""
 echo "Making reverse complement of input fastq file..."
-cat ../$fastq_file | ~/Package_scripts/perl/rcFastq.pl > revcom_${fastq_file}
+cat ../$fastq_file | ../perl/rcFastq.pl > revcom_${fastq_file}
 
 test_file revcom_${fastq_file}
 
@@ -281,7 +286,7 @@ fi
 
 echo ""
 echo "Flipping cutadapt output back to the original orientation..."
-cat cut_LTRrevcom_${fastq_file} | ~/Package_scripts/perl/rcFastq.pl > cut_LTR_F_${fastq_file}
+cat cut_LTRrevcom_${fastq_file} | ../perl/rcFastq.pl > cut_LTR_F_${fastq_file}
 
 test_file cut_LTR_F_${fastq_file}
 
@@ -313,7 +318,7 @@ rm revcom_${fastq_file}
 
 echo ""
 echo "Trimming linker_F barcodes.  Barcode grab.pl says:"
-perl ~/Package_scripts/perl/barcode_grab_v1.0.pl ../$barcode_ref cut_linkerrevcom_${fastq_file}
+perl ../perl/barcode_grab_v1.0.pl ../$barcode_ref cut_linkerrevcom_${fastq_file}
 
 test_file cut_linkerrevcom_${fastq_file}_bctrimmed.fastq
 
@@ -329,7 +334,7 @@ rm cut_linkerrevcom_${fastq_file}_bcsummary  # Summary of how many times each
 
 echo "Flipping cutadapt output back to the original orientation..."
 cat cut_linkerrevcom_${fastq_file}_bctrimmed.fastq | \
- ~/Package_scripts/perl/rcFastq.pl > cut_linker_F_${fastq_file}
+ ../perl/rcFastq.pl > cut_linker_F_${fastq_file}
 
 test_file cut_linker_F_${fastq_file}
 
@@ -351,7 +356,7 @@ test_file cut_linker_R_withbc_${fastq_file}
 
 echo ""
 echo "Trimming linker_R barcodes.  Barcode grab.pl says:"
-perl ~/Package_scripts/perl/barcode_grab_v1.0.pl ../$barcode_ref cut_linker_R_withbc_${fastq_file}
+perl ../perl/barcode_grab_v1.0.pl ../$barcode_ref cut_linker_R_withbc_${fastq_file}
 
 # Change file names
 mv cut_linker_R_withbc_${fastq_file}_bctrimmed.fastq cut_linker_R_${fastq_file}
@@ -382,7 +387,7 @@ rm cut_linker_R_${fastq_file}
 
 echo ""
 echo "The perl script remove_duplicate_fastq_names_v1.0.pl says:"
-perl ~/Package_scripts/perl/remove_duplicate_fastq_names_v1.0.pl ${fastq_file}_linker_cat.fastq
+perl ../perl/remove_duplicate_fastq_names_v1.0.pl ${fastq_file}_linker_cat.fastq
 
 echo ""
 test_file ${fastq_file}_linker_cat.fastq_nodup.fastq
@@ -400,7 +405,7 @@ echo ""
 echo "The perl script fastq_file_overlap_v1.0.pl is running to remove inverted linker" 
 echo "from cut_linker_F_${fastq_file}."
 echo "It says:"
-perl ~/Package_scripts/perl/fastq_file_overlap_v1.0.pl ${fastq_file}_linker_cat.fastq_nodup.fastq \
+perl ../perl/fastq_file_overlap_v1.0.pl ${fastq_file}_linker_cat.fastq_nodup.fastq \
  cut_linker_F_${fastq_file} 
 
 echo ""
@@ -466,7 +471,7 @@ cat cut_LTR_F_${fastq_file} cut_LTR_R_${fastq_file} > ${fastq_file}_LTR_cat.fast
 echo ""
 echo "Removing reads with both LTR_F and LTR_R."
 echo "The perl script remove_duplicate_fastq_names_v1.0.pl says:"
-perl ~/Package_scripts/perl/remove_duplicate_fastq_names_v1.0.pl ${fastq_file}_LTR_cat.fastq
+perl ../perl/remove_duplicate_fastq_names_v1.0.pl ${fastq_file}_LTR_cat.fastq
 
 echo ""
 test_file ${fastq_file}_LTR_cat.fastq_nodup.fastq
@@ -495,7 +500,7 @@ echo "***Step 3. Sort LTR_F into long and short fragments.***"
 
 echo ""
 echo "split_LTR_to_long_and_short_v1.0.pl says:"
-perl ~/Package_scripts/perl/split_LTR_to_long_and_short_v1.0.pl cut_LTR_R_${fastq_file} \
+perl ../perl/split_LTR_to_long_and_short_v1.0.pl cut_LTR_R_${fastq_file} \
  cut_LTR_F_${fastq_file} ${fastq_file}_LTR_cat.fastq_nodup.fastq
 
 echo ""
@@ -523,7 +528,7 @@ echo "***Step 4. Begin formatting of LTR_F_long.***"
 
 echo ""
 echo "Creating reverse complement of LTR_F_long..."
-cat cut_LTR_F_${fastq_file}_long.fastq | ~/Package_scripts/perl/rcFastq.pl > \
+cat cut_LTR_F_${fastq_file}_long.fastq | ../perl/rcFastq.pl > \
  revcom_cut_LTR_F_${fastq_file}_long.fastq
 
 test_file revcom_cut_LTR_F_${fastq_file}_long.fastq
@@ -539,7 +544,7 @@ test_file noncut_revcom_cut_LTR_F_${fastq_file}_long.fastq
 rm revcom_cut_LTR_F_${fastq_file}_long.fastq
 
 echo "Flipping the cutadapt untrimmed output back to the original orientation..."
-cat noncut_revcom_cut_LTR_F_${fastq_file}_long.fastq | ~/Package_scripts/perl/rcFastq.pl > \
+cat noncut_revcom_cut_LTR_F_${fastq_file}_long.fastq | ../perl/rcFastq.pl > \
  cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link
 
 test_file cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link
@@ -564,7 +569,7 @@ echo "***Step 5. Only keep LTR_F_long reads that have linker_F in the paired rea
 echo ""
 echo "Running pair_in_other_file_v1.0.pl to print LTR_F_long reads that have linker_F"
 echo "in their paired read.  It says:"
-perl ~/Package_scripts/perl/pair_in_other_file_v1.0.pl \
+perl ../perl/pair_in_other_file_v1.0.pl \
  cut_linker_F_nodup_${fastq_file} cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link
 
 # Output is cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link_pairhaslink.fastq.
@@ -614,7 +619,7 @@ rm cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link_pairhaslink.fastq
 # these don't need to be kept.
 echo ""
 echo "Trimming linker_R barcodes.  Barcode grab.pl says:"
-perl ~/Package_scripts/perl/barcode_grab_v1.0.pl ../$barcode_ref \
+perl ../perl/barcode_grab_v1.0.pl ../$barcode_ref \
  cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link_pairhaslink_rm-R-link_withbc.fastq
 
 test_file cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link_pairhaslink_rm-R-link_withbc.fastq_bctrimmed.fastq
@@ -660,7 +665,7 @@ echo "***Step 7. Trim linker_R from LTR_F_short.***"
 echo ""
 echo "Running fastq_file_overlap_v1.0.pl to only keepr LTR_F_short reads that"
 echo "do NOT have inverted linker.  It says:"
-perl ~/Package_scripts/perl/fastq_file_overlap_v1.0.pl ${fastq_file}_linker_cat.fastq_nodup.fastq \
+perl ../perl/fastq_file_overlap_v1.0.pl ${fastq_file}_linker_cat.fastq_nodup.fastq \
  cut_LTR_F_${fastq_file}_short.fastq
 
 # Output is cut_LTR_F_${fastq_file}_short.fastq_overlap.fastq.
@@ -686,7 +691,7 @@ cutadapt -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -q 3 -m 18 -O 4 -e 0 \
 
 echo ""
 echo "Trimming linker_R barcodes.  Barcode grab.pl says:"
-perl ~/Package_scripts/perl/barcode_grab_v1.0.pl ../$barcode_ref cut_LTR_F_${fastq_file}_short.fastq_trim-R-link_withbc.fastq
+perl ../perl/barcode_grab_v1.0.pl ../$barcode_ref cut_LTR_F_${fastq_file}_short.fastq_trim-R-link_withbc.fastq
 
 test_file cut_LTR_F_${fastq_file}_short.fastq_trim-R-link_withbc.fastq_bctrimmed.fastq
 
@@ -722,7 +727,7 @@ echo "***Step 8. Format LTR_R.***"
 echo ""
 echo "Running fastq_file_overlap_v1.0.pl to remove entries from LTR_R that have inverted LTR."
 echo "It says:"
-perl ~/Package_scripts/perl/fastq_file_overlap_v1.0.pl ${fastq_file}_LTR_cat.fastq_nodup.fastq \
+perl ../perl/fastq_file_overlap_v1.0.pl ${fastq_file}_LTR_cat.fastq_nodup.fastq \
  cut_LTR_R_${fastq_file}
 
 # Output is cut_LTR_R_${fastq_file}_overlap.fastq
@@ -741,7 +746,7 @@ if [ "$keep" = "off" ]; then rm ${fastq_file}_LTR_cat.fastq_nodup.fastq; fi
 echo ""
 echo "Running fastq_file_overlap_v1.0.pl to remove entries from LTR_R that have inverted linker."
 echo "It says:"
-perl ~/Package_scripts/perl/fastq_file_overlap_v1.0.pl ${fastq_file}_linker_cat.fastq_nodup.fastq \
+perl ../perl/fastq_file_overlap_v1.0.pl ${fastq_file}_linker_cat.fastq_nodup.fastq \
  cut_LTR_R_${fastq_file}_overlap.fastq
 
 # Output is cut_LTR_R_${fastq_file}_overlap.fastq_overlap.fastq.
@@ -760,7 +765,7 @@ rm ${fastq_file}_linker_cat.fastq_nodup.fastq
 
 echo ""
 echo "Creating reverse complement of cut_LTR_R_${fastq_file}_overlap.fastq_overlap.fastq."
-cat cut_LTR_R_${fastq_file}_overlap.fastq_overlap.fastq | ~/Package_scripts/perl/rcFastq.pl > \
+cat cut_LTR_R_${fastq_file}_overlap.fastq_overlap.fastq | ../perl/rcFastq.pl > \
  revcom_cut_LTR_R_${fastq_file}_doubleoverlap.fastq
 
 test_file revcom_cut_LTR_R_${fastq_file}_doubleoverlap.fastq
@@ -782,7 +787,7 @@ test_file cut_revcom_cut_LTR_R_${fastq_file}_doubleoverlap_withbc.fastq
 
 echo ""
 echo "Trimming linker_F barcodes.  Barcode grab.pl says:"
-perl ~/Package_scripts/perl/barcode_grab_v1.0.pl ../$barcode_ref cut_revcom_cut_LTR_R_${fastq_file}_doubleoverlap_withbc.fastq
+perl ../perl/barcode_grab_v1.0.pl ../$barcode_ref cut_revcom_cut_LTR_R_${fastq_file}_doubleoverlap_withbc.fastq
 
 test_file cut_revcom_cut_LTR_R_${fastq_file}_doubleoverlap_withbc.fastq_bctrimmed.fastq
 
@@ -803,7 +808,7 @@ rm revcom_cut_LTR_R_${fastq_file}_doubleoverlap.fastq
 
 echo ""
 echo "Flipping the cutadapt output back to the original orientation..."
-cat cut_revcom_cut_LTR_R_${fastq_file}_doubleoverlap.fastq | ~/Package_scripts/perl/rcFastq.pl > \
+cat cut_revcom_cut_LTR_R_${fastq_file}_doubleoverlap.fastq | ../perl/rcFastq.pl > \
  cut_LTR_R_${fastq_file}_overlap_trim-F-link.fastq
 
 test_file cut_LTR_R_${fastq_file}_overlap_trim-F-link.fastq
@@ -857,7 +862,7 @@ cat cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link_pairhaslink_rm-R-link.fastq
 
 echo ""
 echo "Grabbing pairs of LTR_F. fastq_get_pair_v1.0.pl says:"
-perl ~/Package_scripts/perl/fastq_get_pair_v1.0.pl ${fastq_file}_LTR_F_combo \
+perl ../perl/fastq_get_pair_v1.0.pl ${fastq_file}_LTR_F_combo \
  ../$fastq_file
 
 test_file ${fastq_file}_LTR_F_combo_pairs-with-p.fastq
@@ -932,7 +937,7 @@ fi
 echo ""
 echo "Making reverse complement of LTR_F |p fastq file..."
 cat ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq | \
- ~/Package_scripts/perl/rcFastq.pl > \
+ ../perl/rcFastq.pl > \
  revcom_${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq
 
 test_file revcom_${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq
@@ -974,7 +979,7 @@ rm revcom_${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R_noLTRF.fastq
 
 echo ""
 echo "Trimming linker_F barcodes.  Barcode grab.pl says:"
-perl ~/Package_scripts/perl/barcode_grab_v1.0.pl ../$barcode_ref \
+perl ../perl/barcode_grab_v1.0.pl ../$barcode_ref \
  revcom_${fastq_file}_LTR_F_combo_p_trim_withbc.fastq
 
 test_file revcom_${fastq_file}_LTR_F_combo_p_trim_withbc.fastq_bctrimmed.fastq
@@ -997,7 +1002,7 @@ test_file revcom_${fastq_file}_LTR_F_combo_p_trim.fastq
 
 echo ""
 echo "Flipping cutadapt output back to the original orientation..."
-cat revcom_${fastq_file}_LTR_F_combo_p_trim.fastq | ~/Package_scripts/perl/rcFastq.pl \
+cat revcom_${fastq_file}_LTR_F_combo_p_trim.fastq | ../perl/rcFastq.pl \
  > ${fastq_file}_LTR_F_combo_p_trim.fastq
 
 test_file ${fastq_file}_LTR_F_combo_p_trim.fastq
@@ -1017,7 +1022,7 @@ echo "***Step 10. Make non-q pairs of LTR_R reads.***"
 
 echo ""
 echo "Grabbing pairs of LTR_R. fastq_get_pair_v1.0.pl says:"
-perl ~/Package_scripts/perl/fastq_get_pair_v1.0.pl \
+perl ../perl/fastq_get_pair_v1.0.pl \
  cut_LTR_R_${fastq_file}_overlap_trim-F-link.fastq ../$fastq_file
 
 test_file cut_LTR_R_${fastq_file}_overlap_trim-F-link.fastq_pairs-with-p.fastq
@@ -1039,7 +1044,7 @@ rm cut_LTR_R_${fastq_file}_overlap_trim-F-link.fastq_pairs-with-p.fastq
 
 echo ""
 echo "Making reverse complement of LTR_R |p fastq file..."
-cat ${fastq_file}_LTR_R_pairs-with-p_noLTR-R.fastq | ~/Package_scripts/perl/rcFastq.pl > \
+cat ${fastq_file}_LTR_R_pairs-with-p_noLTR-R.fastq | ../perl/rcFastq.pl > \
 	revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R.fastq
 
 test_file revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R.fastq
@@ -1099,7 +1104,7 @@ fi
 echo ""
 echo "Flipping cutadapt output back to the original orientation..."
 cat revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq \
- | ~/Package_scripts/perl/rcFastq.pl \
+ | ../perl/rcFastq.pl \
  > ${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq
 
 rm revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq
@@ -1121,7 +1126,7 @@ rm ${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq
 
 echo ""
 echo "Trimming linker_R barcodes.  Barcode grab.pl says:"
-perl ~/Package_scripts/perl/barcode_grab_v1.0.pl ../$barcode_ref \
+perl ../perl/barcode_grab_v1.0.pl ../$barcode_ref \
  ${fastq_file}_LTR_R_p_trim_withbc.fastq
 
 test_file ${fastq_file}_LTR_R_p_trim_withbc.fastq_bctrimmed.fastq
@@ -1255,7 +1260,7 @@ echo "***Step 13. Remove reads with suspicious pairs, and only keep -q reads.***
 echo ""
 echo "Removing reads that did not align near their |p pair, or aligned in the"
 echo "wrong orientation.  bowtie_examine_p-pairs_v1.4.pl says:"
-perl ~/Package_scripts/perl/bowtie_examine_p-pairs_v1.4.pl \
+perl ../perl/bowtie_examine_p-pairs_v1.4.pl \
  ${fastq_file}_p-pairs_bowtie_strata_sort
 
 echo ""
@@ -1280,7 +1285,7 @@ if [ "$keep" = "off" ]; then rm ${fastq_file}_LTR_R_p_trim_withbc.fastq_barcodes
 
 echo ""
 echo "Adding |p to the p-pair barcode names..."
-cat ${fastq_file}_p-pair_barcodes.fastq | ~/Package_scripts/perl/add_p_v1.0.pl > \
+cat ${fastq_file}_p-pair_barcodes.fastq | ../perl/add_p_v1.0.pl > \
  ${fastq_file}_p-pair_barcodes.fastq_withp
 
 test_file ${fastq_file}_p-pair_barcodes.fastq_withp
@@ -1304,7 +1309,7 @@ if [ "$keep" = "off" ]; then rm cut_linker_R_${fastq_file}_barcodes.fastq; fi
 echo ""
 echo "Removing reads with inconsistent barcodes..."
 echo "barcode_compare.pl says:"
-perl ~/Package_scripts/perl/barcode_compare_v1.1.pl ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair \
+perl ../perl/barcode_compare_v1.1.pl ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair \
  ${fastq_file}_barcodes_cat.fastq ${fastq_file}_p-pair_barcodes.fastq_withp 
 
 test_file ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc
@@ -1340,7 +1345,7 @@ echo "Modifying the bowtie output to indicate the bases adjacent to the LTR."
 echo "Note that the base reported will be the leftmost base of the N bases next"
 echo "to the LTR (default is 4 bp, corresponding to a MLV integration site)."
 echo "bowtie_LTR_adjacent.pl says:"
-perl ~/Package_scripts/perl/bowtie_LTR_adjacent_v4.0.pl \
+perl ../perl/bowtie_LTR_adjacent_v4.0.pl \
  LTR_F_temp cut_LTR_R_${fastq_file}_overlap_trim-F-link.fastq \
  ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc ${footprint}
 
@@ -1372,7 +1377,7 @@ echo "***Step 15. Reduce bowtie output to one entry per fragment.***"
 
 # echo ""
 # echo "bowtie_single_frag_v1.0.pl says:"
-# perl ~/Package_scripts/perl/bowtie_single_frag_v1.0.pl \
+# perl ../perl/bowtie_single_frag_v1.0.pl \
 #  ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent_sort
 
 awk -v OFS="\t" '{base=substr($1, 1, length($1)-2); if(base != oldbase){print $1,$9,$3,$4}; oldbase=base}' \
@@ -1400,7 +1405,7 @@ echo "***Step 16. Split fragments into barcode groups.***"
 echo ""
 echo "Adding barcode information."
 echo "barcode_whittle_and_count_v1.2.pl says:"
-perl ~/Package_scripts/perl/barcode_whittle_and_count_v1.2.pl \
+perl ../perl/barcode_whittle_and_count_v1.2.pl \
  ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent_sort_singlefrag \
  ${fastq_file}_barcodes_cat.fastq ../${barcode_ref}
 
@@ -1428,7 +1433,7 @@ if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpa
 echo ""
 echo "Adding barcode group information."
 echo "bowtie_barcode-group_v1.0.pl says:"
-perl ~/Package_scripts/perl/bowtie_barcode-group_v1.0.pl ../${barcode_ref}_${group_number}_groups \
+perl ../perl/bowtie_barcode-group_v1.0.pl ../${barcode_ref}_${group_number}_groups \
  ${fastq_file}_combo_split
 
 echo ""
@@ -1478,9 +1483,9 @@ i=1
 while
   [ $i -le ${group_number} ]
 do
-  perl ~/Package_scripts/perl/remove_nearby_v3.0.pl \
+  perl ../perl/remove_nearby_v3.0.pl \
     ${fastq_file}_combo_split_grouped_plus_uniq_${i} 5
-  perl ~/Package_scripts/perl/remove_nearby_v3.0.pl \
+  perl ../perl/remove_nearby_v3.0.pl \
     ${fastq_file}_combo_split_grouped_minus_uniq_${i} 5
   
   test_file ${fastq_file}_combo_split_grouped_plus_uniq_${i}.not_in_5
@@ -1549,7 +1554,7 @@ test_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cuto
 echo ""
 echo "Making the 'island' file (modified Bowtie format)."
 echo "notinx_to_bowtie_v1.0.pl says:"
-perl ~/Package_scripts/perl/notinx_to_bowtie_v1.0.pl \
+perl ../perl/notinx_to_bowtie_v1.0.pl \
  ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff} \
  ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent_sort
 
@@ -1574,7 +1579,7 @@ test_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cuto
 echo ""
 echo "Adding barcode information."
 echo "barcode_whittle_and_count_v1.2.pl says:"
-perl ~/Package_scripts/perl/barcode_whittle_and_count_v1.2.pl \
+perl ../perl/barcode_whittle_and_count_v1.2.pl \
  ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island \
  ${fastq_file}_barcodes_cat.fastq ../${barcode_ref}
  
@@ -1598,7 +1603,7 @@ rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cut
 
 
 echo "bowtie_barcode-group_v1.0.pl says:"
-perl ~/Package_scripts/perl/bowtie_barcode-group_v1.0.pl \
+perl ../perl/bowtie_barcode-group_v1.0.pl \
  ../${barcode_ref}_${group_number}_groups \
  ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort 
 
