@@ -8,7 +8,7 @@ my $t0 = Benchmark->new;
 
 # Author: Matt LaFave
 # Written: 3/21/12
-# Last revised: 6/8/12
+
 
 # This scripts compares aligned reads to their p-pair, and verifies that they
 # are on the same chromosome, within 1 kb of each other, and facing each other.
@@ -79,10 +79,10 @@ while (<INPUT>) {
 	# Bowtie reports alignments beginning at the leftmost base.
 	# If the read is -, change the start position to be the rightmost base.
 	# That way, the comparisons will be based on the 5' base of each.
-	if ($strand_hash{$line[0]} eq '-') {
+	if ($strand_hash{$line[0]} == 16) {
 		
 		# The '-1' is necessary to make accurate comparisons of position.
-		$start_hash{$line[0]} += length ($line[4]) - 1;
+		$start_hash{$line[0]} += length ($line[9]) - 1;
 		
 	}
 	
@@ -157,7 +157,7 @@ while (<INPUT>) {
 				
 				# If the pairs are less than 1 kb apart, check if they point
 				# toward each other.
-				if ($start_hash{$pair_name} <= $start_hash{$name} && $strand_hash{$pair_name} eq '+' && $strand_hash{$name} eq '-' ) {
+				if ($start_hash{$pair_name} <= $start_hash{$name} && $strand_hash{$pair_name} == 0 && $strand_hash{$name} == 16 ) {
 						
 					# If the pair came first or the same, is +, and the other 
 					# name is -, it's good.
@@ -174,7 +174,7 @@ while (<INPUT>) {
 					delete $chrom_hash{$name};
 					delete $start_hash{$name};	
 							
-				} elsif ($start_hash{$pair_name} >= $start_hash{$name} && $strand_hash{$name} eq '+' && $strand_hash{$pair_name} eq '-' ) {
+				} elsif ($start_hash{$pair_name} >= $start_hash{$name} && $strand_hash{$name} == 0 && $strand_hash{$pair_name} == 16 ) {
 					
 					# If the main name is first or the same, is +, and the pair 
 					# is -, it's good.

@@ -8,7 +8,7 @@ my $t0 = Benchmark->new;
 
 # Author: Matt LaFave
 # Written: 5/2/12
-# Last revised: 8/7/12
+
 
 # Manipulates a bowtie output file, such that the positions reported correspond
 # to the leftmost base of the sequence in which the virus integrated.  For MLV,
@@ -118,7 +118,7 @@ while (<BOWTIE>) {
 	
 	my $name = '@' . $bowtie_line[0];
 	my $strand = $bowtie_line[1];
-	# $bowtie_line[3] is the position, and $bowtie_line[4] is the read sequence.
+	# $bowtie_line[3] is the position, and $bowtie_line[9] is the read sequence.
 	
 	# Figure out if the read is LTR_F or LTR_R
 	my $orientation;
@@ -145,7 +145,7 @@ while (<BOWTIE>) {
 	# needed.
 	if ( $orientation eq 'F') {
 		
-		if ( $strand eq '+') {
+		if ( $strand == 0 ) {
 			
 			# Base you want is 5' base, which is the leftmost.
 			# No change is needed.
@@ -153,10 +153,10 @@ while (<BOWTIE>) {
 			# Integration was on the + strand.
 			$strand_hash{$bowtie_line[0]} = "+";
 			
-		} elsif ( $strand eq '-') {
+		} elsif ( $strand == 16 ) {
 			
 			# Want the 5' base, which here is the rightmost.
-			$bowtie_line[3] += length ($bowtie_line[4]) - $repeat;
+			$bowtie_line[3] += length ($bowtie_line[9]) - $repeat;
 			
 			# Integration was on the - strand.
 			$strand_hash{$bowtie_line[0]} = "-";
@@ -169,15 +169,15 @@ while (<BOWTIE>) {
 		
 	} elsif ( $orientation eq 'R') {
 		
-		if ( $strand eq '+') {
+		if ( $strand == 0 ) {
 			
 			# Want the 3' base, which here is the rightmost.
-			$bowtie_line[3] += length ($bowtie_line[4]) - $repeat;
+			$bowtie_line[3] += length ($bowtie_line[9]) - $repeat;
 			
 			# Integration was on the - strand.
 			$strand_hash{$bowtie_line[0]} = "-";
 			
-		} elsif ( $strand eq '-') {
+		} elsif ( $strand == 16 ) {
 			
 			# Want the 3' base, which here is the leftmost.
 			# No change is needed.
@@ -292,12 +292,8 @@ while (<BOWTIE>) {
 		# If the entry is still in the hash at this point, it's safe to print.
 		# Any bad reads would have already been removed.
 		
-		if ( defined $bowtie_line[7]) {
-			print OUTPUT "$bowtie_line[0]\t$bowtie_line[1]\t$bowtie_line[2]\t$position_hash{$name}\t$bowtie_line[4]\t$bowtie_line[5]\t$bowtie_line[6]\t$bowtie_line[7]\t$strand_hash{$name}\n";
-		} else {
-			print OUTPUT "$bowtie_line[0]\t$bowtie_line[1]\t$bowtie_line[2]\t$position_hash{$name}\t$bowtie_line[4]\t$bowtie_line[5]\t$bowtie_line[6]\t(x)\t$strand_hash{$name}\n";
-		}
-		
+		print OUTPUT "$bowtie_line[0]\t$bowtie_line[1]\t$bowtie_line[2]\t$position_hash{$name}\t$bowtie_line[4]\t$bowtie_line[5]\t$bowtie_line[6]\t$bowtie_line[7]\t$bowtie_line[8]\t$bowtie_line[9]\t$bowtie_line[10]\t$bowtie_line[11]\t$bowtie_line[12]\t$bowtie_line[13]\t$strand_hash{$name}\n";
+				
 	} else {
 		
 		# If the name isn't in the hash, that's because the read positions

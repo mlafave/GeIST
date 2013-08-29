@@ -68,6 +68,17 @@ else
 fi
 ver=0
 
+ver=`samtools 2>&1 | head -3 | awk '/^Version/ {print $2}'`
+if 
+   [ $ver = "0.1.18" ] 
+then 
+   echo "samtools is version 0.1.18"
+else
+   echo "WARNING: samtools is not version 0.1.18" 
+fi
+ver=0
+
+
 # Check for the correct number of arguments
 if [ $# -lt 7 ]
 then echo "usage: $0 fastq_file barcode_ref bowtie_index_path insert cutoff name group_number [intermediate_on?]\n"
@@ -1194,55 +1205,70 @@ echo "***Step 12. Align -q and non-q reads with bowtie.***"
 echo ""
 echo "Aligning non-p reads to ${bowtie_index}..."
 echo "Bowtie says:"
-bowtie -t -a -m 1 --best --strata --chunkmbs 256 ${bowtie_index} \
- ${fastq_file}_non-p ${fastq_file}_non-p_bowtie_strata
+bowtie -t -a -m 1 --best --strata --chunkmbs 256 --sam ${bowtie_index} \
+ ${fastq_file}_non-p ${fastq_file}_non-p_bowtie_strata.sam
 
 echo ""
-test_file ${fastq_file}_non-p_bowtie_strata
+test_file ${fastq_file}_non-p_bowtie_strata.sam
 
 if [ "$keep" = "off" ]; then rm ${fastq_file}_non-p; fi
+
+# Remove the header; keep it for later.
+cat ${fastq_file}_non-p_bowtie_strata.sam | awk '$1 ~ /^@/' > \
+    ${fastq_file}_non-p_bowtie_strata.sam_header
+
+# cut -f1-3 ${fastq_file}_non-p_bowtie_strata.sam_header > \
+#     ${fastq_file}_non-p_bowtie_strata.sam_header_clean
+# 
+# test_file ${fastq_file}_non-p_bowtie_strata.sam_header_clean
+# rm ${fastq_file}_non-p_bowtie_strata.sam_header
+
+cat ${fastq_file}_non-p_bowtie_strata.sam | awk '$1 !~ /^@/' > \
+    ${fastq_file}_non-p_bowtie_strata_aln.sam
+
+test_file ${fastq_file}_non-p_bowtie_strata_aln.sam
+if [ "$keep" = "off" ]; then rm ${fastq_file}_non-p_bowtie_strata.sam; fi
 
 # Repeat for the p-pairs file.
 echo ""
 echo "Aligning p-reads to ${bowtie_index}..."
 echo "Bowtie says:"
-bowtie -t -a -m 1 --best --strata --chunkmbs 256 ${bowtie_index} \
- ${fastq_file}_p ${fastq_file}_p_bowtie_strata
+bowtie -t -a -m 1 --best --strata --chunkmbs 256 --sam ${bowtie_index} \
+ ${fastq_file}_p ${fastq_file}_p_bowtie_strata.sam
 
 echo ""
-test_file ${fastq_file}_p_bowtie_strata
+test_file ${fastq_file}_p_bowtie_strata.sam
 
 if [ "$keep" = "off" ]; then rm ${fastq_file}_p; fi
 
+cat ${fastq_file}_p_bowtie_strata.sam | awk '$1 !~ /^@/' > \
+    ${fastq_file}_p_bowtie_strata_aln.sam
+
+test_file ${fastq_file}_p_bowtie_strata_aln.sam
+if [ "$keep" = "off" ]; then rm ${fastq_file}_p_bowtie_strata.sam; fi
 
 # Add "|p" to the end of the names of all p-pair reads.
 echo ""
 echo "Adding |p to the end of p-pair alignment names..."
-awk '{print $1"|p\t"$2"\t"$3"\t"$4"\t"$5"\t"$6"\t"$7"\t"$8}' ${fastq_file}_p_bowtie_strata > ${fastq_file}_p_bowtie_strata_rename
+awk -v OFS="\t" '{ if(NF == 14){print $1"|p",$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14}else{print $1"|p",$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12} }' \
+    ${fastq_file}_p_bowtie_strata_aln.sam > ${fastq_file}_p_bowtie_strata_aln_rename.sam
 
-test_file ${fastq_file}_p_bowtie_strata_rename
+test_file ${fastq_file}_p_bowtie_strata_aln_rename.sam
+rm ${fastq_file}_p_bowtie_strata_aln.sam
 
-rm ${fastq_file}_p_bowtie_strata
-
-# Concatenate the two output files together.
+# Concatenate the two output files together.  Sorting just makes it easier to 
+# read.
 echo ""
-echo "Concatenating the non-p and p alignments together..."
-cat ${fastq_file}_non-p_bowtie_strata ${fastq_file}_p_bowtie_strata_rename \
- > ${fastq_file}_p-pairs_bowtie_strata
+echo "Concatenating the non-p and p alignments together, "
+echo " removing unmapped reads, then sorting by chromosome and alignment..."
+cat ${fastq_file}_non-p_bowtie_strata_aln.sam \
+    ${fastq_file}_p_bowtie_strata_aln_rename.sam | awk '$3 != "*"' | \
+    sort -k3,3 -k4,4n > ${fastq_file}_p-pairs_bowtie_strata_sort.sam
 
-# Sort - this step might not be necessary, but it makes things easier to read.
+test_file ${fastq_file}_p-pairs_bowtie_strata_sort.sam
 
-echo ""
-echo "Sorting Bowtie alignment by chromosome, then by alignment..."
-sort -k3,3 -k4,4n ${fastq_file}_p-pairs_bowtie_strata \
- > ${fastq_file}_p-pairs_bowtie_strata_sort
-
-test_file ${fastq_file}_p-pairs_bowtie_strata_sort
-
-rm ${fastq_file}_non-p_bowtie_strata
-rm ${fastq_file}_p_bowtie_strata_rename
-rm ${fastq_file}_p-pairs_bowtie_strata
-
+rm ${fastq_file}_non-p_bowtie_strata_aln.sam
+rm ${fastq_file}_p_bowtie_strata_aln_rename.sam
 
 ################################################################################
 # Step 13.
@@ -1259,18 +1285,21 @@ echo "***Step 13. Remove reads with suspicious pairs, and only keep -q reads.***
 
 echo ""
 echo "Removing reads that did not align near their |p pair, or aligned in the"
-echo "wrong orientation.  bowtie_examine_p-pairs_v1.4.pl says:"
-perl ../perl/bowtie_examine_p-pairs_v1.4.pl \
- ${fastq_file}_p-pairs_bowtie_strata_sort
+echo " wrong orientation.  bowtie_examine_p-pairs_v1.4.pl says:"
+perl ../perl/bowtie_examine_p-pairs_sam.pl \
+ ${fastq_file}_p-pairs_bowtie_strata_sort.sam
+
+mv ${fastq_file}_p-pairs_bowtie_strata_sort.sam_nofarpair \
+    ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair.sam
 
 echo ""
-test_file ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair
+test_file ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair.sam
 
-if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pairs_bowtie_strata_sort; fi
-if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_with-p; fi
-if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pairs_bowtie_strata_sort_badorientation; fi
-if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pairs_bowtie_strata_sort_toofar; fi
-if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pairs_bowtie_strata_sort_difchrom; fi
+if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pairs_bowtie_strata_sort.sam; fi
+if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pairs_bowtie_strata_sort.sam_nofarpair_with-p; fi
+if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pairs_bowtie_strata_sort.sam_badorientation; fi
+if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pairs_bowtie_strata_sort.sam_toofar; fi
+if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pairs_bowtie_strata_sort.sam_difchrom; fi
 
 
 cat ${fastq_file}_LTR_R_p_trim_withbc.fastq_barcodes.fastq \
@@ -1309,14 +1338,19 @@ if [ "$keep" = "off" ]; then rm cut_linker_R_${fastq_file}_barcodes.fastq; fi
 echo ""
 echo "Removing reads with inconsistent barcodes..."
 echo "barcode_compare.pl says:"
-perl ../perl/barcode_compare_v1.1.pl ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair \
+perl ../perl/barcode_compare_v1.1.pl ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair.sam \
  ${fastq_file}_barcodes_cat.fastq ${fastq_file}_p-pair_barcodes.fastq_withp 
 
-test_file ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc
+mv ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair.sam_consistentbc \
+    ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc.sam
 
-if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair; fi
+echo ""
+test_file ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc.sam
+
+if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair.sam; fi
 if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pair_barcodes.fastq_withp; fi
-if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_inconsistentbc; fi
+if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair.sam_inconsistentbc; fi
+
 
 ################################################################################
 # Step 14.
@@ -1343,18 +1377,23 @@ if [ "$keep" = "off" ]; then rm cut_LTR_F_${fastq_file}_short.fastq_trim-R-link.
 echo ""
 echo "Modifying the bowtie output to indicate the bases adjacent to the LTR."
 echo "Note that the base reported will be the leftmost base of the N bases next"
-echo "to the LTR (default is 4 bp, corresponding to a MLV integration site)."
+echo "to the LTR (defined by the insert selected at runtime)."
 echo "bowtie_LTR_adjacent.pl says:"
-perl ../perl/bowtie_LTR_adjacent_v4.0.pl \
+perl ../perl/bowtie_LTR_adjacent_sam.pl \
  LTR_F_temp cut_LTR_R_${fastq_file}_overlap_trim-F-link.fastq \
- ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc ${footprint}
+ ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc.sam ${footprint}
+
+mv ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc.sam_LTRadjacent ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent
 
 echo ""
 test_file ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent
+# It's not REALLY a SAM file right now, since the 15th column isn't formatted
+# correctly - so I won't append ".sam" onto it.  Note it is STILL 1-based.
+
 
 rm LTR_F_temp
 if [ "$keep" = "off" ]; then rm cut_LTR_R_${fastq_file}_overlap_trim-F-link.fastq; fi
-if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc; fi
+if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc.sam; fi
 
 # Sort - this time, it IS necessary for the next step.
 
@@ -1375,12 +1414,7 @@ rm ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent
 echo ""
 echo "***Step 15. Reduce bowtie output to one entry per fragment.***"
 
-# echo ""
-# echo "bowtie_single_frag_v1.0.pl says:"
-# perl ../perl/bowtie_single_frag_v1.0.pl \
-#  ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent_sort
-
-awk -v OFS="\t" '{base=substr($1, 1, length($1)-2); if(base != oldbase){print $1,$9,$3,$4}; oldbase=base}' \
+awk -v OFS="\t" '{base=substr($1, 1, length($1)-2); if(base != oldbase){print $1,$15,$3,$4}; oldbase=base}' \
    ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent_sort \
    > ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent_sort_singlefrag
 
@@ -1404,8 +1438,8 @@ echo "***Step 16. Split fragments into barcode groups.***"
 
 echo ""
 echo "Adding barcode information."
-echo "barcode_whittle_and_count_v1.2.pl says:"
-perl ../perl/barcode_whittle_and_count_v1.2.pl \
+echo "barcode_whittle_and_count_sam.pl says:"
+perl ../perl/barcode_whittle_and_count_sam.pl \
  ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent_sort_singlefrag \
  ${fastq_file}_barcodes_cat.fastq ../${barcode_ref}
 
@@ -1420,7 +1454,7 @@ rm ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent_s
 echo ""
 echo "Reformatting the _singlefrag_barcodes file..."
 cat ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent_sort_singlefrag_barcodes \
- | awk '{print $1"\t"$2"\t"$3"\t"$4"\t(-)\t(-)\t(-)\t(-)\t(-)\t"$5"\t"$6}' > \
+ | awk '{print $1"\t"$2"\t"$3"\t"$4"\t(-)\t(-)\t(-)\t(-)\t(-)\t(-)\t(-)\t(-)\t(-)\t(-)\t(-)\t"$5"\t"$6}' > \
  ${fastq_file}_combo_split
 
 echo ""
@@ -1428,16 +1462,18 @@ test_file ${fastq_file}_combo_split
 
 if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent_sort_singlefrag_barcodes; fi
 
+
 # Run barcode-group
 
 echo ""
 echo "Adding barcode group information."
-echo "bowtie_barcode-group_v1.0.pl says:"
-perl ../perl/bowtie_barcode-group_v1.0.pl ../${barcode_ref}_${group_number}_groups \
+echo "bowtie_barcode-group_sam.pl says:"
+perl ../perl/bowtie_barcode-group_sam.pl ../${barcode_ref}_${group_number}_groups \
  ${fastq_file}_combo_split
 
 echo ""
 test_file ${fastq_file}_combo_split_grouped
+
 
 rm ${fastq_file}_combo_split
 
@@ -1451,11 +1487,11 @@ while
   [ $i -le ${group_number} ]
 do
   cat ${fastq_file}_combo_split_grouped | \
-  awk -v num="${i}" '$12 == num && $2 == "+" {print $3"\t"$4}' | \
+  awk -v num="${i}" '$18 == num && $2 == "+" {print $3"\t"$4}' | \
   sort -k1,1 -k2,2n | uniq -c > ${fastq_file}_combo_split_grouped_plus_uniq_${i}
   
   cat ${fastq_file}_combo_split_grouped | \
-  awk -v num="${i}" '$12 == num && $2 == "-" {print $3"\t"$4}' | \
+  awk -v num="${i}" '$18 == num && $2 == "-" {print $3"\t"$4}' | \
   sort -k1,1 -k2,2n | uniq -c > ${fastq_file}_combo_split_grouped_minus_uniq_${i}
   
   test_file ${fastq_file}_combo_split_grouped_plus_uniq_${i}
@@ -1535,7 +1571,7 @@ done
 # just been removed in the previous steps.
 
 echo ""
-echo "***Step 19. Make a bowtie file of the remaining reads.***"
+echo "***Step 19. Make a SAM file of the remaining reads.***"
 
 
 echo ""
@@ -1578,8 +1614,8 @@ test_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cuto
 
 echo ""
 echo "Adding barcode information."
-echo "barcode_whittle_and_count_v1.2.pl says:"
-perl ../perl/barcode_whittle_and_count_v1.2.pl \
+echo "barcode_whittle_and_count_sam.pl says:"
+perl ../perl/barcode_whittle_and_count_sam.pl \
  ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island \
  ${fastq_file}_barcodes_cat.fastq ../${barcode_ref}
  
@@ -1588,6 +1624,7 @@ test_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cuto
 
 if [ "$keep" = "off" ]; then rm ${fastq_file}_barcodes_cat.fastq; fi
 rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island
+
 
 # Sort, add barcode groups
 
@@ -1602,8 +1639,8 @@ rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cut
 
 
 
-echo "bowtie_barcode-group_v1.0.pl says:"
-perl ../perl/bowtie_barcode-group_v1.0.pl \
+echo "bowtie_barcode-group_sam.pl says:"
+perl ../perl/bowtie_barcode-group_sam.pl \
  ../${barcode_ref}_${group_number}_groups \
  ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort 
 
@@ -1613,6 +1650,7 @@ test_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cuto
 rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort
 
 
+
 # Use of notinx_to_bowtie, above, guarantees that the sites selected pass the 
 # cutoff in at least one barcode group.  Now, further reduce it to be a list 
 # of ONLY the barcode groups (and strands) in which the site passes the cutoff.
@@ -1620,11 +1658,11 @@ rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cut
 # Split the island file by strand
 echo ""
 echo "Splitting the island file by strand..."
-awk '$9 == "+"' \
+awk '$15 == "+"' \
    ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped \
    > ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_plus
 
-awk '$9 == "-"' \
+awk '$15 == "-"' \
    ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped \
    > ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_minus
 
@@ -1657,15 +1695,15 @@ if [ "$keep" = "off" ]; then rm ${fastq_file}_combo_split_grouped_plus_uniq_*.no
 if [ "$keep" = "off" ]; then rm ${fastq_file}_combo_split_grouped_minus_uniq_*.not_in_5_cutoff${cutoff}; fi
 
 
-# Only keep the bowtie file entries that are the correct position for that group
+# Only keep the sam file entries that are the correct position for that group
 echo ""
 echo "Removing entries that failed to pass the cutoff for the group/strand..."
-perl ~/Zf_scripts/perl/bowtie_good-groups.pl \
+perl ../perl/sam_good-groups.pl \
  ${fastq_file}_combo_split_grouped_plus_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_group-info \
  ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_plus \
  > ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_plus_good
 
-perl ~/Zf_scripts/perl/bowtie_good-groups.pl \
+perl ../perl/sam_good-groups.pl \
  ${fastq_file}_combo_split_grouped_minus_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_group-info \
  ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_minus \
  > ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_minus_good
@@ -1673,6 +1711,7 @@ perl ~/Zf_scripts/perl/bowtie_good-groups.pl \
 echo ""
 test_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_plus_good
 test_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_minus_good
+
 
 if [ "$keep" = "off" ]; then rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_group-info; fi
 if [ "$keep" = "off" ]; then rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped; fi
@@ -1703,7 +1742,7 @@ echo ""
 echo "Converting output to .BED format..."
 
 cat ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_good \
-  | awk '{print $3"\t"$4"\t"$9"\t"$10 }' | sort | uniq | sort -k4,4 > \
+  | awk '{print $3"\t"$4"\t"$15"\t"$16 }' | sort | uniq | sort -k4,4 > \
   ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_job${JOB_ID}_demibed
 
 test_file ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_job${JOB_ID}_demibed
@@ -1712,12 +1751,13 @@ sort -k1,1 ../${barcode_ref}_${group_number}_groups > ${barcode_ref}_${group_num
 
 test_file ${barcode_ref}_${group_number}_groups_barsort
 
+
 join -1 4 -2 1 ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_job${JOB_ID}_demibed \
   ${barcode_ref}_${group_number}_groups_barsort \
-  | awk -v OFS="\t" '{print $2,$3,$4,$6}' | sort | uniq \
-  | awk -v footprint="$footprint" '{print $1"\t"$2"\t"$2+footprint"\t"$4"\t"1000"\t"$3"\t"$2"\t"$2+footprint}' \
+  | awk -v OFS="\t" '{print $2,$3-1,$4,$6}' | sort | uniq \
+  | awk -v footprint="$footprint" '{print $1"\t"$2"\t"$2+footprint"\t"$4"\t0\t"$3"\t"$2"\t"$2+footprint}' \
   | sort -k1,1 -k2,2n \
-  | awk 'BEGIN{print "track name=mlv_integ type=bed itemRgb=Off db=danRer7"}{print}' \
+  | awk -v description="${name}" -v insjob="${insert}${JOB_ID}" 'BEGIN{print "track name="insjob" type=bed description=\""description"\""}{print}' \
   > ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_${insert}_job${JOB_ID}.bed
 
 
@@ -1728,93 +1768,84 @@ if [ "$keep" = "off" ]; then rm ${fastq_file}_1-${group_number}-grouped_not-in-5
 if [ "$keep" = "off" ]; then rm ${barcode_ref}_${group_number}_groups_barsort; fi
 
 
+################################################################################
+
+# Step 21.
+# Make the output into a real SAM file, then to BAM.
+
+## EITHER HERE OR AFTER ADDING THE JOB NUMBERS, FIX THE SAM FORMAT AND PUT THE
+## HEADER BACK ON
+
 echo ""
-echo "Adding insert and job number to the remaining 'island' files..."
+echo "***Step 21. Convert file to SAM/BAM format***"
+
+echo ""
+echo "Adding SAM formatting to extra columns, adding job number to name..."
+cat ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_good \
+    | awk -v OFS="\t" '{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,"XO:A:"$15,"BC:Z:"$16,"XP:Z:"$17,"XG:i:"$18}' \
+    > ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_job${JOB_ID}.sam
+
+test_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_job${JOB_ID}.sam
+
+echo ""
+echo "Putting header on the SAM file..."
+cat ${fastq_file}_non-p_bowtie_strata.sam_header \
+    ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_job${JOB_ID}.sam \
+    > ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_job${JOB_ID}_header.sam
+
+test_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_job${JOB_ID}_header.sam
+if [ "$keep" = "off" ]; then rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_job${JOB_ID}.sam; fi
+
+echo ""
+echo "Converting to BAM..."
+samtools view -Sb \
+    ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_job${JOB_ID}_header.sam \
+    > ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_job${JOB_ID}_header.bam
+
+test_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_job${JOB_ID}_header.bam
+rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_job${JOB_ID}_header.sam
+
+
+echo ""
+echo "Adding insert and job number to the remaining 'island' file..."
 mv ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodesum \
  ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodesum_${insert}_job${JOB_ID}
-mv ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_good \
- ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_${insert}_job${JOB_ID}
 
 
 ################################################################################
 
-# Step 21.
+# Step 22.
 # Clean up files.
 
 # First, we move the input file and the final output file, so they won't be 
 # included in the tarball.
 
 echo ""
-echo "***Step 21. Clean up files.***"
-
-# echo ""
-# echo "Moving $fastq_file out of the temporary directory..."
-# if
-#   [ -e ../$fastq_file ]
-# then
-#   throw_error "Can't move $fastq_file; a file with that name already exists in parent directory!"
-# else
-#   mv $fastq_file ..  || throw_error "Didn't move $fastq_file!"
-#   echo "$fastq_file moved to parent directory."
-# fi
-
-# echo ""
-# echo "Moving $barcode_ref out of the temporary directory..."
-# if
-#   [ -e ../$barcode_ref ]
-# then
-#   throw_error "Can't move $barcode_ref; a file with that name already exists in parent directory!"
-# else
-#   mv $barcode_ref .. || throw_error "Didn't move $barcode_ref!"
-#   echo "$barcode_ref moved to parent directory."
-# fi
-
-
-# echo ""
-# echo "Moving ${barcode_ref}_${group_number}_groups out of the temporary directory..."
-# if
-#   [ -e ../${barcode_ref}_${group_number}_groups ]
-# then
-#   throw_error "Can't move $barcode_ref; a file with that name already exists in parent directory!"
-# else
-#   mv ${barcode_ref}_${group_number}_groups .. || throw_error "Didn't move ${barcode_ref}_${group_number}_groups!"
-#   echo "${barcode_ref}_${group_number}_groups moved to parent directory."
-# fi
-
+echo "***Step 22. Clean up files.***"
 
 echo ""
-echo "Moving output BED file out of the temporary directory..."
-if
-  [ -e ../${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_${insert}_job${JOB_ID}.bed ]
-then
-  throw_error "Can't move ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_${insert}_job${JOB_ID}.bed; a file with that name already exists in parent directory!"
-else
-  mv ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_${insert}_job${JOB_ID}.bed .. || throw_error "Didn't move ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_${insert}_job${JOB_ID}.bed!"
-  echo "${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_${insert}_job${JOB_ID}.bed moved to parent directory."
-fi
+echo "Making output directory..."
+mkdir $PWD/Output_${name}_${insert}_$JOB_ID
 
-# Put the island files (information on all remaining reads, as well as barcode
-# count) into a tarball, and move it to the parent directory
 
-tar czf ${fastq_file}_${name}_islandfiles_${insert}_${JOB_ID}.tgz \
- ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodesum_${insert}_job${JOB_ID} \
- ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_${insert}_job${JOB_ID}
+function move_file
+{
+ if 
+   [ -e Output_${name}_${insert}_$JOB_ID/$1 ]
+ then 
+   throw_error "Can't move ${1}; a file with that name already exists in parent directory!"
+ else  
+   mv $1 Output_${name}_${insert}_${JOB_ID}/ || throw_error "Didn't move ${1}!"
+ fi
+}
 
-test_file ${fastq_file}_${name}_islandfiles_${insert}_${JOB_ID}.tgz
+move_file ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_${insert}_job${JOB_ID}.bed
+move_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_job${JOB_ID}_header.bam
+move_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodesum_${insert}_job${JOB_ID}
 
-echo ""
-echo "Moving ${fastq_file}_${name}_islandfiles_${insert}_${JOB_ID}.tgz out of the temporary directory..."
-if
-  [ -e ../${fastq_file}_${name}_islandfiles_${insert}_${JOB_ID}.tgz ]
-then
-  throw_error "Can't move ${fastq_file}_${name}_islandfiles_${insert}_${JOB_ID}.tgz; a file with that name already exists in parent directory!"
-else
-  mv ${fastq_file}_${name}_islandfiles_${insert}_${JOB_ID}.tgz .. || throw_error "Didn't move ${fastq_file}_${name}_islandfiles_${insert}_${JOB_ID}.tgz!"
-  echo "${fastq_file}_${name}_islandfiles_${insert}_${JOB_ID}.tgz moved to parent directory."
-fi
-
+rm ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_${insert}_job${JOB_ID}.bed
+rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_job${JOB_ID}_header.bam
 rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodesum_${insert}_job${JOB_ID}
-rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_${insert}_job${JOB_ID}
 
 
 echo ""
@@ -1823,23 +1854,27 @@ if [ "$keep" = "on" ]
 then 
    tar czf ${fastq_file}_${name}_intermediatefiles_${insert}_$JOB_ID.tgz *${fastq_file}* 
    test_file ${fastq_file}_${name}_intermediatefiles_${insert}_$JOB_ID.tgz
-   if
-      [ -e ../${fastq_file}_${name}_intermediatefiles_${insert}_$JOB_ID.tgz ]
-   then
-      throw_error "Can't move ${fastq_file}_${name}_intermediatefiles_${insert}_$JOB_ID.tgz; it already exists in parent directory!"
-   else
-      mv ${fastq_file}_${name}_intermediatefiles_${insert}_$JOB_ID.tgz ..
-      echo "${fastq_file}_${name}_intermediatefiles_${insert}_$JOB_ID.tgz moved to parent directory."
-   fi
+   
+   move_file ${fastq_file}_${name}_intermediatefiles_${insert}_$JOB_ID.tgz
+   
 fi
 
+# Move the output directory out of the working directory
+if 
+   [ -e ../Output_${name}_${insert}_$JOB_ID ]
+ then 
+   throw_error "Can't move Output_${name}_${insert}_$JOB_ID; a file with that name already exists in parent directory!"
+ else  
+   mv Output_${name}_${insert}_${JOB_ID}/ .. || throw_error "Didn't move Output_${name}_${insert}_$JOB_ID!"
+ fi 
 
 # Remove the working directory, and the files remaining therein.
 
-# echo ""
-# echo "Removing working directory and files..."
-# cd ..
-# rm -r $workdir
+echo ""
+echo "Removing working directory and files..."
+cd ..
+rm -r $workdir
+
 
 echo ""
 echo "$0 finished!"

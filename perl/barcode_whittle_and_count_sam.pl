@@ -8,7 +8,7 @@ my $t0 = Benchmark->new;
 
 # Author: Matt LaFave
 # Written: 4/5/12
-# Last revised: 7/5/12
+
 
 # This script adds barcode information to a file with bowtie-output-style 
 # formatting.  The "whittle" refers to the fact that entries without associated
@@ -24,9 +24,10 @@ my $t0 = Benchmark->new;
 
 ################################################################################
 
-# The bowtie file is intended to be the 'island' or 'island_sort' file - the one
-# near the very end, when things have already been whittled down to only those
-# inserts that are not with x bases of another.
+# Originally, The bowtie file was intended to be the 'island' or 'island_sort' 
+# file - the one near the very end, when things have already been whittled down 
+# to only those inserts that are not with x bases of another. It also works on
+# files with fewer columns, though.
 
 unless ( @ARGV == 3 ) {
 	die "Usage: barcode_whittle_and_count_v1.2.pl bowtie_file barcode_cat barcode_ref\n$!";
@@ -83,7 +84,6 @@ close BOWTIE;
 
 
 
-
 unless ( open BARCODEIN, "<", "$ARGV[1]" ) {
 	die "Cannot open file $ARGV[0]: $!";
 }
@@ -137,7 +137,8 @@ unless ( open BARCODEREF, "<", "$ARGV[2]" ) {
 while (<BARCODEREF>) {
 	
 	chomp;
-	$count_hash{$_} = 0;
+	my @line = split;
+	$count_hash{$line[0]} = 0;
 	
 }
 
@@ -174,7 +175,7 @@ while (<BOWTIE>) {
 		# if the read_hash contains the barcode for that read, print that
 		# to the output file.
 		
-		print BARCODEOUT "$_\t$read_hash{$name}\t(x)\n";
+		print BARCODEOUT "$_\t$read_hash{$name}\tbc_from_read\n";
 		
 		# Next, keep a running count of how many different fragments have 
 		# been detected.
@@ -206,7 +207,7 @@ while (<BOWTIE>) {
 		# then print out the barcode with a note that it came from the paired
 		# read.
 		
-		print BARCODEOUT "$_\t$read_hash{$pair_name}\tBarcode_from_pair\n";
+		print BARCODEOUT "$_\t$read_hash{$pair_name}\tbc_from_pair\n";
 				
 		my $shortname = substr($pair_name, 0, (length($pair_name) - 2));
 		if (! exists $fragment_hash{$shortname}) {

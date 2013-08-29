@@ -70,9 +70,9 @@ while (<BOWTIE>) {
 	# $line[9] should hold the barcode information.
 	# At this point, every barcode in the bowtie file should be in the hash, but
 	# it won't hurt to check.
-	if (exists $group_hash{$line[9]}) {
+	if (exists $group_hash{$line[15]}) {
 		
-		print OUTPUT "$_\t$group_hash{$line[9]}\n";
+		print OUTPUT "$_\t$group_hash{$line[15]}\n";
 		
 	} else {
 		
