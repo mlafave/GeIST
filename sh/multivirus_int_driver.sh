@@ -252,8 +252,8 @@ then
     echo ""
     echo "Performing LTR_F+TTTG+GGGGCTC removal with cutadapt..."
     
-    cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -q 3 -m 11 -O 31 \
-      -e 0 --untrimmed-output=noLTR+GGGGCTCrevcom_${fastq_file} \
+    cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -q 3 -m 11 -O 17 \
+      --untrimmed-output=noLTR+GGGGCTCrevcom_${fastq_file} \
       -o /dev/null revcom_${fastq_file}
    
    echo ""
@@ -273,7 +273,7 @@ fi
 
 echo ""
 echo "Performing LTR_F detection with cutadapt..."
-cutadapt -a ${LTR} -q 3 -m 11 -O 11 -e 0 \
+cutadapt -a ${LTR} -q 3 -m 11 -O 17 -e 0 \
  --untrimmed-output=/dev/null -o cut_LTRrevcom_${fastq_file} \
  ${inputF}
 
@@ -311,7 +311,7 @@ rm cut_LTRrevcom_${fastq_file}
 echo ""
 echo "Performing linker_F detection with cutadapt..."
 cutadapt \
- -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -q 3 -m 18 -O 4 -e 0 \
+ -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -q 3 -m 18 -O 10 -e 0 \
  --untrimmed-output=/dev/null -o cut_linkerrevcom_${fastq_file} revcom_${fastq_file}
 
 test_file cut_linkerrevcom_${fastq_file}
@@ -350,7 +350,7 @@ rm cut_linkerrevcom_${fastq_file}_bctrimmed.fastq
 echo ""
 echo "Performing linker_R detection with cutadapt..."
 cutadapt \
- -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -q 3 -m 18 -O 4 -e 0 \
+ -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -q 3 -m 18 -O 10 -e 0 \
  --untrimmed-output=/dev/null -o cut_linker_R_withbc_${fastq_file} ../${fastq_file}
 
 # "withbc" means it hasn't had the barcodes trimmed off yet.
@@ -434,8 +434,8 @@ if [ "$insert" = "mlv" ]
 then
    echo ""
    echo "Performing LTR_R+TTTG+GGGGCTC removal with cutadapt..."
-   cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -q 3 -m 11 -O 31 \
-     -e 0 --untrimmed-output=noLTR_R-GGGGCTC_${fastq_file} \
+   cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -q 3 -m 11 -O 17 \
+     --untrimmed-output=noLTR_R-GGGGCTC_${fastq_file} \
      -o /dev/null ../${fastq_file}
    
    test_file noLTR_R-GGGGCTC_${fastq_file}
@@ -449,7 +449,7 @@ fi
 
 echo ""
 echo "Performing LTR_R detection with cutadapt..."
-cutadapt -a ${LTR} -q 3 -m 11 -O 11 -e 0 \
+cutadapt -a ${LTR} -q 3 -m 11 -O 17 -e 0 \
  --untrimmed-output=/dev/null -o cut_LTR_R_${fastq_file} \
  ${inputR}
 
@@ -537,7 +537,7 @@ test_file revcom_cut_LTR_F_${fastq_file}_long.fastq
 
 echo ""
 echo "Using cutadapt to remove reads containing linker_F..."
-cutadapt -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -m 11 -O 11 \
+cutadapt -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -m 11 -O 17 \
  --untrimmed-output=noncut_revcom_cut_LTR_F_${fastq_file}_long.fastq \
  -o /dev/null revcom_cut_LTR_F_${fastq_file}_long.fastq
 
@@ -605,7 +605,7 @@ echo "***Step 6. Trim linker_R from LTR_F_long reads.***"
 echo ""
 echo "Trimming linker_R using cutadapt..."
 cutadapt \
- -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -q 3 -m 18 -O 7 -e 0 \
+ -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -q 3 -m 11 -O 10 -e 0 \
  --untrimmed-output=cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link_pairhaslink_uo.fastq \
  -o cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link_pairhaslink_rm-R-link_withbc.fastq \
  cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link_pairhaslink.fastq
@@ -665,7 +665,7 @@ echo "***Step 7. Trim linker_R from LTR_F_short.***"
 # doesn't matter for this step.
 
 echo ""
-echo "Running fastq_file_overlap_v1.0.pl to only keepr LTR_F_short reads that"
+echo "Running fastq_file_overlap_v1.0.pl to only keep LTR_F_short reads that"
 echo "do NOT have inverted linker.  It says:"
 perl ../perl/fastq_file_overlap_v1.0.pl ${fastq_file}_linker_cat.fastq_nodup.fastq \
  cut_LTR_F_${fastq_file}_short.fastq
@@ -686,7 +686,7 @@ if [ "$keep" = "off" ]; then rm cut_LTR_F_${fastq_file}_short.fastq; fi
 
 echo ""
 echo "Trimming linker_R off of LTR_F_short via cutadapt..."
-cutadapt -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -q 3 -m 18 -O 4 -e 0 \
+cutadapt -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -q 3 -m 18 -O 1 -e 0 \
  --untrimmed-output=/dev/null \
  -o cut_LTR_F_${fastq_file}_short.fastq_trim-R-link_withbc.fastq \
  cut_LTR_F_${fastq_file}_short.fastq_overlap.fastq
@@ -780,7 +780,7 @@ rm cut_LTR_R_${fastq_file}_overlap.fastq_overlap.fastq
 echo ""
 echo "Detecting linker_F on LTR_R reads (by finding linker_R on reverse"
 echo "complement LTR_R reads)..."
-cutadapt -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -q 3 -m 18 -O 7 -e 0 \
+cutadapt -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -q 3 -m 18 -O 1 -e 0 \
  --untrimmed-output=/dev/null \
  -o cut_revcom_cut_LTR_R_${fastq_file}_doubleoverlap_withbc.fastq \
  revcom_cut_LTR_R_${fastq_file}_doubleoverlap.fastq
@@ -879,7 +879,7 @@ rm ${fastq_file}_LTR_F_combo
 
 echo ""
 echo "Performing removal of reads that have linker_R with cutadapt..."
-cutadapt -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -m 11 -O 7 \
+cutadapt -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -m 11 -O 10 \
  --untrimmed-output=${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR.fastq \
   -o /dev/null ${fastq_file}_LTR_F_combo_pairs-with-p.fastq
 
@@ -901,7 +901,7 @@ if [ "$insert" = "mlv" ]
 then
    echo ""
    echo "Performing LTR_R+TTTG+GGGGCTC detection/removal with cutadapt..."
-   cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -m 11 -O 25 -e 0 \
+   cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -m 11 -O 17 \
      --untrimmed-output=${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_noGGGGCTC.fastq \
      -o /dev/null ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR.fastq
    
@@ -919,7 +919,7 @@ fi
 
 echo ""
 echo "Performing LTR_R detection/trim with cutadapt..."
-cutadapt -a ${LTR} -m 11 -O 11 \
+cutadapt -a ${LTR} -m 11 -O 14 \
  -o ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq \
  ${pair_inputR}
 
@@ -951,7 +951,7 @@ rm ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq
 
 echo ""
 echo "Performing removal of reads with LTR_F with cutadapt..."
-cutadapt -a ${LTR} -m 11 -O 11 \
+cutadapt -a ${LTR} -m 11 -O 17 \
 --untrimmed-output=revcom_${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R_noLTRF.fastq \
  -o /dev/null \
  revcom_${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq
@@ -965,11 +965,11 @@ rm revcom_${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq
 # For example, -m 11 ensures that any trimmed reads will have at least 11 bp 
 # left.  Since linker trims are typically followed by a call to bowtie_grab.pl, 
 # which removes another 7 bp without allowing mismatches, -m 18 is tantamount
-# to -m 11.
+# to -m 11 (but only if the linker is REQUIRED).
 
 echo ""
 echo "Performing linker_F detection/trim with cutadapt..."
-cutadapt -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -m 18 -O 7 -e 0 \
+cutadapt -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -m 11 -O 7 -e 0 \
  --untrimmed-output=revcom_${fastq_file}_LTR_F_combo_p_trim_uo.fastq \
  -o revcom_${fastq_file}_LTR_F_combo_p_trim_withbc.fastq \
  revcom_${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R_noLTRF.fastq
@@ -1033,7 +1033,7 @@ test_file cut_LTR_R_${fastq_file}_overlap_trim-F-link.fastq_pairs-with-p.fastq
 
 echo ""
 echo "Performing removal of p-reads with LTR_R with cutadapt..."
-cutadapt -a ${LTR} -m 11 -O 11 \
+cutadapt -a ${LTR} -m 11 -O 17 \
  --untrimmed-output=${fastq_file}_LTR_R_pairs-with-p_noLTR-R.fastq \
  -o /dev/null \
   cut_LTR_R_${fastq_file}_overlap_trim-F-link.fastq_pairs-with-p.fastq
@@ -1059,7 +1059,7 @@ rm ${fastq_file}_LTR_R_pairs-with-p_noLTR-R.fastq
 echo ""
 echo "Performing removal of p-reads with linker_F with cutadapt..."
 cutadapt \
- -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -m 11 -O 7 \
+ -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -m 11 -O 10 \
  --untrimmed-output=revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF.fastq \
  -o /dev/null revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R.fastq
 
@@ -1075,7 +1075,7 @@ if [ "$insert" = "mlv" ]
 then
    echo ""
    echo "Performing removal of LTR_F+TTTG+GGGGCTC with cutadapt..."
-   cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -m 11 -O 22 -e 0 \
+   cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -m 11 -O 17 \
      --untrimmed-output=revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_noGGGGCTC.fastq \
      -o /dev/null revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF.fastq
    
@@ -1090,7 +1090,7 @@ fi
 
 echo ""
 echo "Performing trim of LTR_F with cutadapt..."
-cutadapt -a ${LTR} -m 11 -O 11 \
+cutadapt -a ${LTR} -m 11 -O 14 \
  -o revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq \
  ${pair_inputF}
 
@@ -1116,7 +1116,7 @@ rm revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq
 echo ""
 echo "Performing linker_R detection/trim with cutadapt..."
 cutadapt \
- -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -m 18 -O 7 -e 0 \
+ -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -m 11 -O 10 -e 0 \
  --untrimmed-output=${fastq_file}_LTR_R_p_trim_uo.fastq \
  -o ${fastq_file}_LTR_R_p_trim_withbc.fastq \
  ${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq
