@@ -109,6 +109,7 @@ fi
 # Set parameters for the indicated insert
 
 echo $insert | grep -i -q -w 'mlv' && insert=mlv
+echo $insert | grep -i -q -w 'tol2' && insert=tol2
 echo $insert | grep -i -q -w 'hiv' && insert=hiv
 echo $insert | grep -i -q -w 'fv' && insert=fv
 echo $insert | grep -i -q -w 'foamy' && insert=fv
@@ -118,6 +119,11 @@ then
    echo "MLV integrations will be mapped."
    LTR=TGAAAGACCCCCGCTGACGGGTAGTCAATCACTC
    footprint=4
+elif [ "$insert" = "tol2" ]
+then
+   echo "Tol2 integrations will be mapped."
+   LTR=CAGAGGTGTAAAAAGTACTCAAAAATTTTACTCAAGTGA
+   footprint=8
 elif [ "$insert" = "hiv" ]
 then
    echo "HIV integrations will be mapped."
@@ -311,7 +317,7 @@ rm cut_LTRrevcom_${fastq_file}
 echo ""
 echo "Performing linker_F detection with cutadapt..."
 cutadapt \
- -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -q 3 -m 18 -O 10 -e 0 \
+ -a ATGCGCAGTCGACCACGC -q 3 -m 18 -O 10 -e 0 \
  --untrimmed-output=/dev/null -o cut_linkerrevcom_${fastq_file} revcom_${fastq_file}
 
 test_file cut_linkerrevcom_${fastq_file}
@@ -350,7 +356,7 @@ rm cut_linkerrevcom_${fastq_file}_bctrimmed.fastq
 echo ""
 echo "Performing linker_R detection with cutadapt..."
 cutadapt \
- -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -q 3 -m 18 -O 10 -e 0 \
+ -a ATGCGCAGTCGACCACGC -q 3 -m 18 -O 10 -e 0 \
  --untrimmed-output=/dev/null -o cut_linker_R_withbc_${fastq_file} ../${fastq_file}
 
 # "withbc" means it hasn't had the barcodes trimmed off yet.
@@ -537,7 +543,7 @@ test_file revcom_cut_LTR_F_${fastq_file}_long.fastq
 
 echo ""
 echo "Using cutadapt to remove reads containing linker_F..."
-cutadapt -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -m 11 -O 17 \
+cutadapt -a ATGCGCAGTCGACCACGC -m 11 -O 17 \
  --untrimmed-output=noncut_revcom_cut_LTR_F_${fastq_file}_long.fastq \
  -o /dev/null revcom_cut_LTR_F_${fastq_file}_long.fastq
 
@@ -605,7 +611,7 @@ echo "***Step 6. Trim linker_R from LTR_F_long reads.***"
 echo ""
 echo "Trimming linker_R using cutadapt..."
 cutadapt \
- -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -q 3 -m 11 -O 1 -e 0 \
+ -a ATGCGCAGTCGACCACGC -q 3 -m 11 -O 1 -e 0 \
  --untrimmed-output=cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link_pairhaslink_uo.fastq \
  -o cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link_pairhaslink_rm-R-link_withbc.fastq \
  cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link_pairhaslink.fastq
@@ -619,7 +625,7 @@ test_file cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link_pairhaslink_uo.fastq
 
 # Make a list of the reads that look like they might have linker_R
 echo "Extracting names that MIGHT have linker_R..."
-sed -n '1~4p' \
+awk 'NR%4==1' \
   cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link_pairhaslink_rm-R-link_withbc.fastq \
   | sort \
   > cut_LTR_F_${fastq_file}_long.fastq_putative_linker_R
@@ -645,7 +651,7 @@ rm cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link_pairhaslink_rm-R-link_withbc
 
 # Extract the names of the putative linker_R reads that DID have barcode
 echo "Extracting names of reads that DID have barcode..."
-sed -n '1~4p' \
+awk 'NR%4==1' \
   cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link_pairhaslink_rm-R-link_withbc.fastq_bctrimmed.fastq \
   | sort \
   > cut_LTR_F_${fastq_file}_long.fastq_putative_linker_R_withbc
@@ -750,7 +756,7 @@ rm ${fastq_file}_linker_cat.fastq_nodup.fastq
 
 echo ""
 echo "Trimming linker_R off of LTR_F_short via cutadapt..."
-cutadapt -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -q 3 -m 18 -O 1 -e 0 \
+cutadapt -a ATGCGCAGTCGACCACGC -q 3 -m 18 -O 1 -e 0 \
  --untrimmed-output=/dev/null \
  -o cut_LTR_F_${fastq_file}_short.fastq_trim-R-link_withbc.fastq \
  cut_LTR_F_${fastq_file}_short.fastq_overlap.fastq
@@ -849,7 +855,7 @@ rm cut_LTR_R_${fastq_file}_overlap.fastq_overlap.fastq
 echo ""
 echo "Detecting linker_F on LTR_R reads (by finding linker_R on reverse"
 echo "complement LTR_R reads)..."
-cutadapt -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -q 3 -m 18 -O 10 -e 0 \
+cutadapt -a ATGCGCAGTCGACCACGC -q 3 -m 18 -O 10 -e 0 \
  --untrimmed-output=/dev/null \
  -o cut_revcom_cut_LTR_R_${fastq_file}_doubleoverlap_withbc.fastq \
  revcom_cut_LTR_R_${fastq_file}_doubleoverlap.fastq
@@ -948,7 +954,7 @@ rm ${fastq_file}_LTR_F_combo
 
 echo ""
 echo "Performing removal of reads that have linker_R with cutadapt..."
-cutadapt -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -m 11 -O 10 \
+cutadapt -a ATGCGCAGTCGACCACGC -m 11 -O 10 \
  --untrimmed-output=${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR.fastq \
   -o /dev/null ${fastq_file}_LTR_F_combo_pairs-with-p.fastq
 
@@ -1042,7 +1048,7 @@ rm revcom_${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq
 
 echo ""
 echo "Performing linker_F detection/trim with cutadapt..."
-cutadapt -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -m 11 -O 7 -e 0 \
+cutadapt -a ATGCGCAGTCGACCACGC -m 11 -O 7 -e 0 \
  --untrimmed-output=revcom_${fastq_file}_LTR_F_combo_p_trim_uo.fastq \
  -o revcom_${fastq_file}_LTR_F_combo_p_trim_withbc.fastq \
  revcom_${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R_noLTRF.fastq
@@ -1132,7 +1138,7 @@ rm ${fastq_file}_LTR_R_pairs-with-p_noLTR-R.fastq
 echo ""
 echo "Performing removal of p-reads with linker_F with cutadapt..."
 cutadapt \
- -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -m 11 -O 10 \
+ -a ATGCGCAGTCGACCACGC -m 11 -O 10 \
  --untrimmed-output=revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF.fastq \
  -o /dev/null revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R.fastq
 
@@ -1189,7 +1195,7 @@ rm revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq
 echo ""
 echo "Performing linker_R detection/trim with cutadapt..."
 cutadapt \
- -a ATGCGCAGTCGACCACGCGTGCCCTATAGT -m 11 -O 1 -e 0 \
+ -a ATGCGCAGTCGACCACGC -m 11 -O 1 -e 0 \
  --untrimmed-output=${fastq_file}_LTR_R_p_trim_uo.fastq \
  -o ${fastq_file}_LTR_R_p_trim_withbc.fastq \
  ${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq
@@ -1199,7 +1205,7 @@ test_file ${fastq_file}_LTR_R_p_trim_uo.fastq
 
 
 echo "Extracting names that MIGHT have linker_R..."
-sed -n '1~4p' \
+awk 'NR%4==1' \
   ${fastq_file}_LTR_R_p_trim_withbc.fastq \
   | sort \
   > ${fastq_file}_LTR_R_p_trim_putative_linker_R
@@ -1221,7 +1227,7 @@ rm ${fastq_file}_LTR_R_p_trim_withbc.fastq_bcsummary
 
 # Extract the names of the putative linker_R reads that DID have barcode
 echo "Extracting names of reads that DID have barcode..."
-sed -n '1~4p' \
+awk 'NR%4==1' \
   ${fastq_file}_LTR_R_p_trim_withbc.fastq_bctrimmed.fastq \
   | sort \
   > ${fastq_file}_LTR_R_p_trim_putative_linker_R_withbc
