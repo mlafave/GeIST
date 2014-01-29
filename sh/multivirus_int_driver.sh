@@ -1,4 +1,4 @@
-#! /bin/sh
+#! /bin/bash
 
 # Email address, and options, to whom reports should be sent.
 # The -M is for the address, the -m is for when to send email.
@@ -32,7 +32,7 @@
 # Set up functions for file testing & error reporting.
 function throw_error
 {
-  echo ERROR: $1
+  echo >&2 ERROR: $1
   exit 1
 }
 
@@ -47,35 +47,29 @@ function test_file
  fi
 }
 
+# Verify that the necessary programs are installed (also hash commands for faster 
+# lookup later)
+hash cutadapt 2>/dev/null || throw_error "cutadapt not found"
+hash bowtie 2>/dev/null || throw_error "bowtie not found"
+hash samtools 2>/dev/null || throw_error "samtools not found"
+
 # Verify that the programs to be called are of the correct version
 ver=`cutadapt --version`
 if 
-   [ $ver = "0.9.3" ] 
+   awk -v ver="$ver" 'BEGIN {exit !(ver >= 1.3)}' 
 then 
-   echo "cutadapt is version 0.9.3"
+   echo "cutadapt is version $ver"
 else
-   echo "WARNING: cutadapt is not version 0.9.3"
+   throw_error "cutadapt is not at least version 1.3."
 fi
 ver=0
 
 ver=`bowtie --version | head -1 | awk '{print $3}'` 
-if 
-   [ $ver = "0.12.7" ] 
-then 
-   echo "bowtie is version 0.12.7"
-else
-   echo "WARNING: bowtie is not version 0.12.7" 
-fi
+echo "bowtie is version $ver ( >= v. 1.0.0 is preferred)"
 ver=0
 
-ver=`samtools 2>&1 | head -3 | awk '/^Version/ {print $2}'`
-if 
-   [ $ver = "0.1.18" ] 
-then 
-   echo "samtools is version 0.1.18"
-else
-   echo "WARNING: samtools is not version 0.1.18" 
-fi
+ver=`samtools 2>&1 | head -3 | awk '/^Version/ {print $2}' | sed 's/^\(.*\)-.*$/\1/'`
+echo "samtools is version $ver ( >= v. 0.1.19 is preferred)"
 ver=0
 
 
