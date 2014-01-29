@@ -104,6 +104,7 @@ fi
 
 echo $insert | grep -i -q -w 'mlv' && insert=mlv
 echo $insert | grep -i -q -w 'tol2' && insert=tol2
+echo $insert | grep -i -q -w 'ds' && insert=ds
 echo $insert | grep -i -q -w 'hiv' && insert=hiv
 echo $insert | grep -i -q -w 'fv' && insert=fv
 echo $insert | grep -i -q -w 'foamy' && insert=fv
@@ -117,6 +118,11 @@ elif [ "$insert" = "tol2" ]
 then
    echo "Tol2 integrations will be mapped."
    LTR=CAGAGGTGTAAAAAGTACTCAAAAATTTTACTCAAGTGA
+   footprint=8
+elif [ "$insert" = "ds" ]
+then
+   echo "Ds integrations will be mapped."
+   LTR=TAGGGATGAAAACGGTCGGTAACGGTCGGTAAA
    footprint=8
 elif [ "$insert" = "hiv" ]
 then
