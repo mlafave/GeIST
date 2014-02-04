@@ -1,4 +1,4 @@
-#! /bin/bash
+#!/bin/bash
 
 # Email address, and options, to whom reports should be sent.
 # The -M is for the address, the -m is for when to send email.
@@ -28,6 +28,9 @@
 # files is required, entering "on", "yes", "y", or "true" on the command line as
 # an optional sixth argument will turn on recovery of the informative 
 # intermediate files.  Said files are produced as a separate tarball.
+
+# Source .bashrc to get local aliases, etc.
+source ~/.bashrc
 
 # Set up functions for file testing & error reporting.
 function throw_error
@@ -105,9 +108,10 @@ fi
 echo $insert | grep -i -q -w 'mlv' && insert=mlv
 echo $insert | grep -i -q -w 'tol2' && insert=tol2
 echo $insert | grep -i -q -w 'ds' && insert=ds
-echo $insert | grep -i -q -w 'hiv' && insert=hiv
-echo $insert | grep -i -q -w 'fv' && insert=fv
-echo $insert | grep -i -q -w 'foamy' && insert=fv
+echo $insert | grep -i -q -w 'aav' && insert=aav
+# echo $insert | grep -i -q -w 'hiv' && insert=hiv
+# echo $insert | grep -i -q -w 'fv' && insert=fv
+# echo $insert | grep -i -q -w 'foamy' && insert=fv
 
 if [ "$insert" = "mlv" ]
 then 
@@ -124,12 +128,17 @@ then
    echo "Ds integrations will be mapped."
    LTR=TAGGGATGAAAACGGTCGGTAACGGTCGGTAAA
    footprint=8
-elif [ "$insert" = "hiv" ]
+elif [ "$insert" = "aav" ]
 then
-   echo "HIV integrations will be mapped."
-elif [ "$insert" = "fv" ]
-then
-   echo "Foamy Virus integrations will be mapped."
+	echo "AAV integrations will be mapped."
+	LTR=CGAGCGAGCGCGCAGAGA
+	footprint=1
+# elif [ "$insert" = "hiv" ]
+# then
+#    echo "HIV integrations will be mapped."
+# elif [ "$insert" = "fv" ]
+# then
+#    echo "Foamy Virus integrations will be mapped."
 else
    throw_error "Insert $insert not recognized."
 fi
@@ -292,13 +301,33 @@ then
    rm noLTR+GGGGCTCrevcom_${fastq_file} 
 fi
 
+# If analyzing AAV, trim the variable region
+if [ "$insert" = "aav" ]
+then
+	#### AAV_TRIM ####
+	echo ""
+	echo "Removing extra AAV sequence, knowing that the AAV primer was directly adjacent."
+	echo "aav_trim.pl says:"
+	perl ../perl/aav_trim.pl cut_LTRrevcom_${fastq_file} yes
+
+	test_file cut_LTRrevcom_${fastq_file}_aavtrim.fastq
+	test_file cut_LTRrevcom_${fastq_file}_itrbits.fastq
+	
+	LTRtrim=cut_LTRrevcom_${fastq_file}_aavtrim.fastq
+	rm cut_LTRrevcom_${fastq_file}
+	if [ "$keep" = "off" ]; then rm cut_LTRrevcom_${fastq_file}_itrbits.fastq; fi
+	####
+else
+	LTRtrim=cut_LTRrevcom_${fastq_file}
+fi
+
 echo ""
 echo "Flipping cutadapt output back to the original orientation..."
-cat cut_LTRrevcom_${fastq_file} | ../perl/rcFastq.pl > cut_LTR_F_${fastq_file}
+cat ${LTRtrim} | ../perl/rcFastq.pl > cut_LTR_F_${fastq_file}
 
 test_file cut_LTR_F_${fastq_file}
 
-rm cut_LTRrevcom_${fastq_file}
+rm ${LTRtrim}
 
 
 
@@ -465,6 +494,30 @@ if [ -f noLTR_R-GGGGCTC_${fastq_file} ]
 then
    rm noLTR_R-GGGGCTC_${fastq_file}
 fi
+
+
+if [ "$insert" = "aav" ]
+then
+	#### AAV_TRIM ####
+	echo ""
+	echo "Removing extra AAV sequence, knowing that the AAV primer was directly adjacent..."
+	echo "aav_trim.pl says:"
+	perl ../perl/aav_trim.pl cut_LTR_R_${fastq_file} yes
+
+	test_file cut_LTR_R_${fastq_file}_aavtrim.fastq
+	test_file cut_LTR_R_${fastq_file}_itrbits.fastq
+
+	if [ "$keep" = "off" ]; then rm cut_LTR_R_${fastq_file}_itrbits.fastq; fi
+
+	# cut_LTR_R_${fastq_file} shows up a lot in the rest of the script, so I'll just
+	# rename my other output to match.  This will replace the input file.
+	echo "Renaming the aav trimmed version of LTR_R to cut_LTR_R_${fastq_file}." 
+	mv cut_LTR_R_${fastq_file}_aavtrim.fastq cut_LTR_R_${fastq_file}
+
+	test_file cut_LTR_R_${fastq_file}
+fi
+
+
 
 # Concatenate LTR F and R together
 
@@ -998,11 +1051,68 @@ fi
 
 echo ""
 echo "Performing LTR_R detection/trim with cutadapt..."
-cutadapt -a ${LTR} -m 11 -O 5 \
- -o ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq \
- ${pair_inputR}
 
-test_file ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq
+if [ "$insert" = "aav" ]
+then
+	cutadapt -a ${LTR} -m 11 -O 5 -e 0 \
+	 --untrimmed-output=${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq_uo \
+	 -o ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq \
+	 ${pair_inputR}
+
+	test_file ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq_uo
+	test_file ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq
+
+	#### AAV_TRIM #### 
+	# The main output file HAS detected the AAV primer
+	echo ""
+	echo "Trimming extra AAV sequence from the portion that had AAV primer."
+	echo "aav_trim.pl says:"
+
+	perl ../perl/aav_trim.pl \
+	   ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq yes
+
+	test_file ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq_aavtrim.fastq
+	test_file ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq_itrbits.fastq
+
+	if [ "$keep" = "off" ]; then rm \
+	   ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq_itrbits.fastq; fi
+
+
+	# The uo has NOT detected the AAV primer.
+	echo ""
+	echo "Trimming extra AAV sequence from the portion that did NOT have AAV primer."
+	echo "aav_trim.pl says:"
+
+	perl ../perl/aav_trim.pl \
+	   ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq_uo no
+
+	test_file ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq_uo_aavtrim.fastq
+	test_file ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq_uo_itrbits.fastq
+
+	if [ "$keep" = "off" ]; then rm \
+	   ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq_uo_itrbits.fastq; fi
+
+
+	# Combine the two trimmed versions.
+	cat ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq_aavtrim.fastq \
+	   ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq_uo_aavtrim.fastq \
+	   > ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq
+
+	test_file ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq
+
+	if [ "$keep" = "off" ]; then rm \
+	   ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq_aavtrim.fastq; fi
+	if [ "$keep" = "off" ]; then rm \
+	   ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq_uo_aavtrim.fastq; fi
+
+else
+	# This is what is done under normal circumstances
+	cutadapt -a ${LTR} -m 11 -O 5 \
+	 -o ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq \
+	 ${pair_inputR}
+
+	test_file ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R.fastq
+fi
 
 rm ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR.fastq
 # rm ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R+TTTG.fastq
@@ -1169,11 +1279,69 @@ fi
 
 echo ""
 echo "Performing trim of LTR_F with cutadapt..."
-cutadapt -a ${LTR} -m 11 -O 14 \
- -o revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq \
- ${pair_inputF}
 
-test_file revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq
+if [ "$insert" = "aav" ]
+then
+	cutadapt -a ${LTR} -m 11 -O 14 -e 0 \
+	 --untrimmed-output=revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq_uo \
+	 -o revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq \
+	 ${pair_inputF}
+
+	test_file revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq_uo
+	test_file revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq
+
+	#### AAV_TRIM #### - pending change to previous cutadapt
+	# The main output file HAS detected the AAV primer
+	echo ""
+	echo "Trimming extra AAV sequence from the portion that had AAV primer."
+	echo "aav_trim.pl says:"
+
+	perl ../perl/aav_trim.pl \
+	   revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq yes
+
+	test_file revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq_aavtrim.fastq
+	test_file revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq_itrbits.fastq
+
+	if [ "$keep" = "off" ]; then rm \
+	   revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq_itrbits.fastq; fi
+
+
+	# The uo has NOT detected the AAV primer.
+	echo ""
+	echo "Trimming extra AAV sequence from the portion that did NOT have AAV primer."
+	echo "aav_trim.pl says:"
+
+	perl ../perl/aav_trim.pl \
+	   revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq_uo no
+
+	test_file revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq_uo_aavtrim.fastq
+	test_file revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq_uo_itrbits.fastq
+
+	if [ "$keep" = "off" ]; then rm \
+	   revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq_uo_itrbits.fastq; fi
+
+
+	# Combine the two trimmed versions.
+	cat revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq_aavtrim.fastq \
+	   revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq_uo_aavtrim.fastq \
+	   > revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq
+
+	test_file revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq
+
+	if [ "$keep" = "off" ]; then rm \
+	   revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq_aavtrim.fastq; fi
+	if [ "$keep" = "off" ]; then rm \
+	   revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq_uo_aavtrim.fastq; fi
+
+else
+	cutadapt -a ${LTR} -m 11 -O 14 \
+	 -o revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq \
+	 ${pair_inputF}
+
+	test_file revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_trimLTRF.fastq
+
+fi
+
 
 rm revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF.fastq
 
