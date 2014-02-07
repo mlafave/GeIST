@@ -267,7 +267,7 @@ then
     echo ""
     echo "Performing LTR_F+TTTG+GGGGCTC removal with cutadapt..."
     
-    cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -q 3 -m 11 -O 17 \
+    cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -q 3 -m 11 -O 17 -e 0.05 \
       --untrimmed-output=noLTR+GGGGCTCrevcom_${fastq_file} \
       -o /dev/null revcom_${fastq_file}
    
@@ -469,7 +469,7 @@ if [ "$insert" = "mlv" ]
 then
    echo ""
    echo "Performing LTR_R+TTTG+GGGGCTC removal with cutadapt..."
-   cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -q 3 -m 11 -O 17 \
+   cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -q 3 -m 11 -O 17 -e 0.05 \
      --untrimmed-output=noLTR_R-GGGGCTC_${fastq_file} \
      -o /dev/null ../${fastq_file}
    
@@ -1029,7 +1029,7 @@ if [ "$insert" = "mlv" ]
 then
    echo ""
    echo "Performing LTR_R+TTTG+GGGGCTC detection/removal with cutadapt..."
-   cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -m 11 -O 17 \
+   cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -m 11 -O 17 -e 0.05 \
      --untrimmed-output=${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_noGGGGCTC.fastq \
      -o /dev/null ${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR.fastq
    
@@ -1264,7 +1264,7 @@ if [ "$insert" = "mlv" ]
 then
    echo ""
    echo "Performing removal of LTR_F+TTTG+GGGGCTC with cutadapt..."
-   cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -m 11 -O 17 \
+   cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -m 11 -O 17 -e 0.05 \
      --untrimmed-output=revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF_noGGGGCTC.fastq \
      -o /dev/null revcom_${fastq_file}_LTR_R_pairs-with-p_noLTR-R_nolinkF.fastq
    
