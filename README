@@ -1,0 +1,247 @@
+GeIST
+==========
+
+GeIST (Genomic Integration Site Tracker) provides the scripts used to identify
+integration sites from the assay described in Varshney et al. 2013
+(http://dx.doi.org/10.1101/gr.151464.112) and LaFave et al. 2014
+(http://dx.doi.org/10.1093/nar/gkt1399). GeIST is capable of identifying
+integrations from MLV, AAV, Tol2, or Ds-based vectors.
+
+Note that the version of the assay used in LaFave et al. 2014 involved mixing
+the barcodes in such a way as to be able to identify multiple integrations in
+the same integration site.  The current version of GeIST does not automatically
+assume that barcodes have been mixed in this way.  If you wish to apply this
+script to an experiment in which the barcodes have been mixed, please refer to
+the calculations used to print the BED file in the previous version of GeIST,
+hosted at http://research.nhgri.nih.gov/software/GeIST/, and make the
+appropriate modifications to your barcode file (see below).
+
+
+Requirements
+==========
+
+* Perl (all scripts use version 5.8.8)
+* cutadapt version 1.3
+* bowtie version 1.0.0, along with the relevant index
+* samtools version 0.1.19
+* Sufficient RAM to load indexes/hold intermediate values in memory (many of
+	the perl scripts store the contents of large files in hashes).  32 GB of
+	RAM should be sufficient when analyzing a 50 GB input file.
+* Sufficient disk space to hold the output files.  The amount needed depends on
+    the input; if the input is 50 GB, at least 150 GB free space will be needed.  
+    If intermediate files are not kept (the default - see below), less space is 
+    needed, but it will likely still be over 100 GB.  
+
+
+Running the script
+==========
+
+There is a single main shell script, geist.sh, that executes the workflow.  It
+starts with a FASTQ file of sequencing reads, and ends with a BED file of
+integration locations.  
+
+The script was developed to be run on an SGE cluster; as such, it can be 
+submitted using 'qsub', but doing so it not required.  Output files will have 
+the job number assigned by the queue included in their name; if qsub is not 
+used, that part of the name will remain blank.
+
+Run the program with the following command (should be run from within the 
+GeIST directory):
+
+qsub -l mem_free=32G geist.sh reads.fastq barcodes index insert cutoff name groupnumber [intermediate files on/off]
+
+
+More information on the elements of the command:
+
+* If 'qsub' is used, -l can be specified to request memory resources.  This 
+isn't required, but it may be helpful to request a large amount of memory 
+when working with a large FASTQ file.  For a 50 GB FASTQ file, I suggest 
+requesting 32 GB of memory, if available.
+
+* After specifying the name of the shell script, the order in which the 
+remaining files are entered IS important.
+
+* The first file after the script should be the FASTQ file.  This file should
+be moved into the GeIST/ directory prior to running the program.
+
+* The second file should be the file in which the barcodes are listed.  The
+file must be of the following format:
+
+	GAAAAAA	1	plate1	A01	LINE1	A
+	GAAAATT	1	plate1	A01	LINE1	A
+	GAAAAGG	1	plate1	A02	LINE1	B
+	GAAAACC	1	plate1	A02	LINE1	B
+	GAAATAT	1	plate1	A03	LINE1	C
+	GAAATTA	1	plate1	A03	LINE1	C
+	GAAATGC	2	plate1	A04	LINE9	A
+	GAAATCG	2	plate1	A04	LINE9	A
+
+	* The first column contains the barcode sequence, starting with the 5' base
+	as viewed on a read in which the linker is on the rightmost side of the
+	read.
+	* The second column is an integer that indicates the "group" to which the
+	barcode belongs.  For example, the barcodes can be used to multiplex
+	different samples, and each sample should have an integer associated with
+	it so the program knows how to separate them back out.  If everything is
+	from the same sample, just set this column to 1 on ever line.
+	* The third column is a string indicating which plate the sample came from.
+	If they're all the same, just set them all to "plate1".
+	* The fourth column is a string showing the well associated with the
+	barcode.
+	* The fifth column is a string that shows the name of the "group". This can
+	be used to indicate flask number, organism/cell line, etc.  The values in
+	this column correspond to those in column 2.
+	* The fifth column is a string indicating the relevant subset of the group
+	from the fourth column.  If using model organisms, this is a useful place
+	to put a character indicating which individual this barcode was associated
+	with.
+
+* Third, enter the path to the Bowtie index to be used, ending with the
+basename of the index.  The basename is the portion of the name common to all
+six index files (the part that comes before the first period). This argument
+accepts relative or absolute paths.
+
+* Fourth, enter which type of integration you want to detect.  The four options
+are mlv, aav, tol2, and ds.
+
+* Fifth, enter a "cutoff" value.  This specifies the minimum number of 
+sequenced fragments that constitute an integration; enter 0 to allow all 
+integration sites, regardless of fragment count.  
+
+* Sixth, enter a name without spaces.  This will be used in the name of the
+working directory, the output directory, and the tarball of intermediate files.
+It's a good way to tell different runs apart, especially if the job number
+won't be printed (such as when the script is run without qsub).  
+
+* Seventh, enter an integer indicating the number of barcode groups.  This
+should be the same as the largest value in the second column of the barcode
+file.
+
+* The final entry is optional.  By default, the script will remove unnecessary 
+temporary files as it goes along.  If you want this behavior, just leave this 
+field blank.  If you would like to examine these temporary files (for example,
+to see how the final output was derived), enter "on", "yes", "y", or "true".
+
+The script will create a working directory into which it will create the
+intermediate files.  The fastq file and barcode file remain in the parent GeIST
+directory; they should remain in this directory for the duration of the run of
+the program.  When the script is finished, relevant files are moved to an
+Output directory, and the working directory is deleted.
+
+
+Testing the script
+==========
+
+qsub -l mem_free=2.5G geist.sh script_test.fastq BC1-9_barcodes+G_4_groups_example ~/indexes/hg19 mlv 0 example 4 on
+
+The above assumes that you're using a human genome index with basename "hg19",
+such as the one available from the bowtie website at
+ftp://ftp.ccb.jhu.edu/pub/data/bowtie_indexes/hg19.ebwt.zip. The "indexes"
+directory in this example is located in the $HOME directory, but that doesn't
+have to be the case.
+
+These settings will identify MLV integrations in the human genome, based on a
+few reads in script_test.fastq.  It uses a fragment cutoff of 0 (meaning that The expected output can be found in the
+Output_expected/ directory.
+
+
+Understanding the output
+==========
+
+The main output file will have the form 
+${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_${insert}_job${JOB_ID}.bed.  
+The name indicates the FASTQ file submitted, the number of barcode groups used, that
+integrations within 5 bp of another integration with more reads were removed,
+the cutoff used, the type of integration detected, and the job number (if qsub was used to submit the script).
+The format is that of a typical BED file.  The first line is a track header,
+useful if you want to examine the output on the UCSC genome browser.  The
+columns are as follows:
+
+Column 1: Chromosome name
+Column 2: Start position (0-based)
+Column 3: End position (1-based)
+Column 4: The plate, well, line, and individual, according to barcode detected.  
+Column 5: "Score".  This field doesn't mean anything in this context, so I set
+    everything to 0.
+Column 6: Orientation of the integration
+Column 7: thickStart.  Only used for visualization purposes.
+Column 8: thickEnd.  Only used for visualization purposes.
+
+
+Information on the individual reads can be found in 
+${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_job${JOB_ID}_header.bam.  
+Note that this file only contains the reads in which part of the integration
+itself (the "LTR") was detected.  This BAM file can be converted to SAM format
+by using `samtools view`. The first fourteen columns are standard SAM entries. 
+The final four columns contain information specific to the assay:
+	
+	* XO: Indicates the orientation of the integration, relative to the end
+	used for sequencing.  For a given fragment, both read /1 and read /2 will
+	have the same entry in this field.  Note that this orientation is not
+	necessarily the same as the orientation in column 2.  Column 2 is the
+	orientation of the read, and column 15 is the orientation of the entire
+	fragment.  Note that this is only informative if the primer used for insert
+	amplification could only bind to one end of the insert.  For example, AAV
+	has identical termini on both ends, in which case this column is not
+	informative.
+	* BC: The sequence of the barcode detected on this fragment.
+	* XP: Indicates if the barcode was detected on the read itself
+	(bc_from_read) or from the paired read (bc_from_pair).  Typically, short
+	fragments will be bc_from_read and long fragments will be bc_from_pair, but
+	sometimes quality scores make it such that this is not the case.
+	* XG: The group number.
+
+
+${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodesum_${insert}_job${JOB_ID} 
+simply indicates the number of fragments on which each barcode occurred.  This
+file can be useful in determining which barcodes are over- or under-represented.
+
+
+License
+==========
+
+Copyright (c) 2014 Matthew C. LaFave
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+Additional notice
+==========
+
+This software/database is either a United States Government Work or was made 
+under contract for the United States Government. In either case the public may 
+use the software/database on a worldwide and royalty-free basis for any purpose 
+and may reproduce and prepare derivative works without limitation. Although all 
+reasonable efforts have been taken to ensure the accuracy and reliability of 
+the software/database and associated data, the National Human Genome Research 
+Institute (NHGRI), National Institutes of Health (NIH) and the U.S. Government 
+do not and cannot warrant the performance or results that may be obtained by 
+using this software/database or data. NHGRI, NIH and the U.S. Government 
+disclaim all warranties as to performance, merchantability or fitness for any 
+particular purpose.
+
+
+Contact
+==========
+
+Matthew C. LaFave, Ph.D.
+Developmental Genomics Section, Translational and Functional Genomics Branch
+NHGRI, NIH
+
+Email: matthew.lafave [at sign] nih.gov
