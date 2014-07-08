@@ -37,8 +37,8 @@ Running the script
 ==========
 
 There is a single main shell script, geist.sh, that executes the workflow.  It
-starts with a FASTQ file of sequencing reads, and ends with a BED file of
-integration locations.  
+starts with a FASTQ file of sequencing reads, and ends with a BAM of aligned,
+trimmed reads and a BED file of integration locations.  
 
 The script was developed to be run on an SGE cluster; as such, it can be 
 submitted using 'qsub', but doing so it not required.  Output files will have 
@@ -48,7 +48,7 @@ used, that part of the name will remain blank.
 Run the program with the following command (should be run from within the 
 GeIST directory):
 
-qsub -l mem_free=32G geist.sh reads.fastq barcodes index insert cutoff name groupnumber [intermediate files on/off]
+qsub -l mem_free=32G geist.sh -r barcodes -b index -i insert [-c cutoff] [-n name] -g groupnumber [ -k ] reads.fastq
 
 
 More information on the elements of the command:
@@ -58,14 +58,12 @@ isn't required, but it may be helpful to request a large amount of memory
 when working with a large FASTQ file.  For a 50 GB FASTQ file, I suggest 
 requesting 32 GB of memory, if available.
 
-* After specifying the name of the shell script, the order in which the 
-remaining files are entered IS important.
+* After specifying the name of the shell script, the order in which the
+remaining files are entered is not important, with the exception that the input
+FASTQ file must be listed last.
 
-* The first file after the script should be the FASTQ file.  This file should
-be moved into the GeIST/ directory prior to running the program.
-
-* The second file should be the file in which the barcodes are listed.  The
-file must be of the following format:
+* The file specified with the '-r' option is the file in which the barcodes are
+listed.  The file must be of the following format:
 
 	GAAAAAA	1	plate1	A01	LINE1	A
 	GAAAATT	1	plate1	A01	LINE1	A
@@ -96,31 +94,35 @@ file must be of the following format:
 	to put a character indicating which individual this barcode was associated
 	with.
 
-* Third, enter the path to the Bowtie index to be used, ending with the
-basename of the index.  The basename is the portion of the name common to all
-six index files (the part that comes before the first period). This argument
-accepts relative or absolute paths.
+* Use the -b option to enter the path to the Bowtie index to be used, ending
+with the basename of the index.  The basename is the portion of the name common
+to all six index files (the part that comes before the first period). This
+argument accepts relative or absolute paths.
 
-* Fourth, enter which type of integration you want to detect.  The four options
-are mlv, aav, tol2, and ds.
+* Use the -i option enter which type of integration you want to detect.  The
+four options are mlv, aav, tol2, and ds.
 
-* Fifth, enter a "cutoff" value.  This specifies the minimum number of 
-sequenced fragments that constitute an integration; enter 0 to allow all 
-integration sites, regardless of fragment count.  
+* Use -c to enter a "cutoff" value.  This specifies the minimum number of
+sequenced fragments that constitute an integration. The default is 0, which
+allows all integration sites regardless of fragment count.  
 
-* Sixth, enter a name without spaces.  This will be used in the name of the
+* Use -n to enter a name without spaces.  This will be used in the name of the
 working directory, the output directory, and the tarball of intermediate files.
-It's a good way to tell different runs apart, especially if the job number
-won't be printed (such as when the script is run without qsub).  
+It's a good way to tell different runs apart, especially if the job number won't
+be printed (such as when the script is run without qsub).  The default is
+"GeIST". 
 
-* Seventh, enter an integer indicating the number of barcode groups.  This
+* Use -g to enter an integer indicating the number of barcode groups.  This
 should be the same as the largest value in the second column of the barcode
 file.
 
-* The final entry is optional.  By default, the script will remove unnecessary 
-temporary files as it goes along.  If you want this behavior, just leave this 
-field blank.  If you would like to examine these temporary files (for example,
-to see how the final output was derived), enter "on", "yes", "y", or "true".
+* The -k entry is optional.  By default, the script will remove unnecessary
+temporary files as it goes along.  If you would like to examine these temporary
+files (for example, to see how the final output was derived), use -k.
+
+* The last file should be the FASTQ file.  This file should
+be moved into the GeIST/ directory prior to running the program.
+
 
 The script will create a working directory into which it will create the
 intermediate files.  The fastq file and barcode file remain in the parent GeIST
@@ -132,7 +134,7 @@ Output directory, and the working directory is deleted.
 Testing the script
 ==========
 
-qsub -l mem_free=2.5G geist.sh script_test.fastq BC1-9_barcodes+G_4_groups_example ~/indexes/hg19 mlv 0 example 4 on
+qsub -l mem_free=2.5G geist.sh -r BC1-9_barcodes+G_4_groups_example -b ~/indexes/hg19 -i mlv -n example -g 4 -k script_test.fastq
 
 The above assumes that you're using a human genome index with basename "hg19",
 such as the one available from the bowtie website at
@@ -141,8 +143,8 @@ directory in this example is located in the $HOME directory, but that doesn't
 have to be the case.
 
 These settings will identify MLV integrations in the human genome, based on a
-few reads in script_test.fastq.  It uses a fragment cutoff of 0 (meaning that The expected output can be found in the
-Output_expected/ directory.
+few reads in script_test.fastq.  It uses a fragment cutoff of 0.  The expected
+output can be found in the Output_expected/ directory.
 
 
 Understanding the output

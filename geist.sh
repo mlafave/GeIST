@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Operate in the current directory
 #$ -cwd
@@ -11,10 +11,9 @@
 # This script is designed to identify MLV, AAV, Tol2, or Ds integrations, and
 # report them as a BED file, a BAM file, and a file indicating how often each
 # barcode was detected.  Information on every read is also produced.  If access
-# to the intermediate files is required, entering "on", "yes", "y", or "true"
-# on the command line as an optional final argument will turn on recovery of
-# the informative intermediate files.  Said files are produced as a separate
-# tarball.
+# to the intermediate files is required, using the -k option will turn on
+# recovery of the informative intermediate files.  Said files are produced as a
+# separate tarball.
 
 # Source .bashrc to get local aliases, etc.
 source ~/.bashrc
@@ -36,6 +35,78 @@ function test_file
    throw_error "$1 was not produced!"
  fi
 }
+
+
+function test_variable
+{
+	if
+		[ ! $1 ]
+	then
+		print_usage
+		throw_error "required file or option is missing"
+	fi
+}
+
+# Get input via CLI
+print_usage()
+{
+  cat <<EOF
+Usage: geist.sh [options] input.fastq
+	Options:
+	-b	bowtie index path (required)
+	-c	fragment count cutoff (default: 0)
+	-h	print this help message and exit
+	-i	insert: MLV, AAV, Tol2, or Ds (required)
+	-k	keep temporary intermediate files (default: off)
+	-n	name
+	-r	barcode reference file (required)
+EOF
+}
+
+cutoff=0
+keep=off
+name="GeIST"
+while getopts "b:c:hi:kn:r:" OPTION
+do
+	case $OPTION in
+		b)
+			bowtie_index=$OPTARG
+			;;
+		c)
+			cutoff=$OPTARG
+			;;
+		h)
+			print_usage
+			exit 0
+			;;
+		k)
+			keep=on
+			;;
+		i)
+			insert=$OPTARG
+			;;
+		n)
+			name=$OPTARG
+			;;
+		r)
+			barcode_ref=$OPTARG
+			;;
+    esac
+done
+shift $((OPTIND-1))
+fastq_file=$1
+
+test_variable $fastq_file
+test_variable $bowtie_index
+test_variable $insert
+test_variable $barcode_ref
+
+
+
+# Identify the number of barcode groups
+group_number=`awk 'BEGIN{n=1}{if($2 > n){n=$2}}END{print n}' ${barcode_ref}`
+
+
 
 # Verify that the necessary programs are installed (also hash commands for
 # faster lookup later)
@@ -63,20 +134,6 @@ echo "samtools is version $ver ( >= v. 0.1.19 is preferred)"
 ver=0
 
 
-# Check for the correct number of arguments
-if [ $# -lt 7 ]
-then echo "usage: $0 fastq_file barcode_ref bowtie_index_path insert cutoff name group_number [intermediate_on?]\n"
-  exit 1   # General error
-fi
-
-fastq_file=$1
-barcode_ref=$2
-bowtie_index=$3
-insert=$4
-cutoff=$5
-name=$6
-group_number=$7
-inter=$8
 
 # Make sure the fastq file exists & contains data:
 
@@ -125,13 +182,6 @@ else
 fi
 
 # Check if intermediate files are to be deleted or not; default is to delete.
-
-keep=off
-
-echo $inter | grep -i -q -w 'on' && keep=on
-echo $inter | grep -i -q -w 'yes' && keep=on
-echo $inter | grep -i -q -w 'y' && keep=on
-echo $inter | grep -i -q -w 'true' && keep=on
 
 if [ "$keep" = "on" ]
 then 
@@ -2125,4 +2175,4 @@ rm -r $workdir
 
 echo ""
 echo "$0 finished!"
-exit
+exit 0
