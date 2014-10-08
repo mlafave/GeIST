@@ -81,7 +81,9 @@ listed.  The file must be of the following format:
 	barcode belongs.  For example, the barcodes can be used to multiplex
 	different samples, and each sample should have an integer associated with
 	it so the program knows how to separate them back out.  If everything is
-	from the same sample, just set this column to 1 on ever line.
+	from the same sample, just set this column to 1 on ever line.  The integers 
+	in this column need to be sequential, and the first integer in the sequence 
+	needs to be 1.
 	* The third column is a string indicating which plate the sample came from.
 	If they're all the same, just set them all to "plate1".
 	* The fourth column is a string showing the well associated with the
@@ -134,7 +136,7 @@ Output directory, and the working directory is deleted.
 Testing the script
 ==========
 
-qsub -l mem_free=2.5G geist.sh -r BC1-9_barcodes+G_4_groups_example -b ~/indexes/hg19 -i mlv -n example -g 4 -k script_test.fastq
+qsub -l mem_free=2.5G geist.sh -r BC1-9_barcodes+G_4_groups_example -b ~/indexes/hg19 -i mlv -n example -k script_test.fastq
 
 The above assumes that you're using a human genome index with basename "hg19",
 such as the one available from the bowtie website at
