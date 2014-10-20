@@ -204,29 +204,7 @@ file can be useful in determining which barcodes are over- or under-represented.
 License
 ==========
 
-Copyright (c) 2014 Matthew C. LaFave
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-
-
-Additional notice
-==========
+GeIST is licensed under the MIT license. In addition, as a work created at the National Institutes of Health, it carries the following notice:
 
 This software/database is either a United States Government Work or was made 
 under contract for the United States Government. In either case the public may 
@@ -239,6 +217,14 @@ do not and cannot warrant the performance or results that may be obtained by
 using this software/database or data. NHGRI, NIH and the U.S. Government 
 disclaim all warranties as to performance, merchantability or fitness for any 
 particular purpose.
+
+
+Citation
+==========
+
+If you use GeIST in your work, please use the following reference to cite it:
+
+LaFave MC, Varshney GK, Gildea DE, Wolfsberg TG, Baxevanis AD, Burgess SM. MLV integration site selection is driven by strong enhancers and active promoters. 2014 Apr;42(7):4257-69.
 
 
 Contact
