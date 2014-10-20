@@ -48,7 +48,7 @@ used, that part of the name will remain blank.
 Run the program with the following command (should be run from within the 
 GeIST directory):
 
-qsub -l mem_free=32G geist.sh -r barcodes -b index -i insert [-c cutoff] [-n name] -g groupnumber [ -k ] reads.fastq
+qsub -l mem_free=32G geist.sh [ -v ] -r barcodes -b index -i insert [-c cutoff] [-n name] -g groupnumber [ -k ] reads.fastq
 
 
 More information on the elements of the command:
@@ -61,6 +61,9 @@ requesting 32 GB of memory, if available.
 * After specifying the name of the shell script, the order in which the
 remaining files are entered is not important, with the exception that the input
 FASTQ file must be listed last.
+
+* If '-v' is used, GeIST will print the current version number to standard
+output and exit.
 
 * The file specified with the '-r' option is the file in which the barcodes are
 listed.  The file must be of the following format:

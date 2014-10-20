@@ -60,13 +60,21 @@ Usage: geist.sh [options] input.fastq
 	-k	keep temporary intermediate files (default: off)
 	-n	name
 	-r	barcode reference file (required)
+	-v  print version and quit
+EOF
+}
+
+print_version()
+{
+	cat <<EOF
+2.0.0
 EOF
 }
 
 cutoff=0
 keep=off
 name="GeIST"
-while getopts "b:c:hi:kn:r:" OPTION
+while getopts "b:c:hi:kn:r:v" OPTION
 do
 	case $OPTION in
 		b)
@@ -90,6 +98,10 @@ do
 			;;
 		r)
 			barcode_ref=$OPTARG
+			;;
+		v)
+			print_version
+    		exit 0
 			;;
     esac
 done
