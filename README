@@ -48,7 +48,7 @@ used, that part of the name will remain blank.
 Run the program with the following command (should be run from within the 
 GeIST directory):
 
-qsub -l mem_free=32G geist.sh [ -v ] -r barcodes -b index -i insert [-c cutoff] [-n name] -g groupnumber [ -k ] reads.fastq
+qsub -l mem_free=32G geist.sh [ -v ] -r barcodes -b index -i insert [-c cutoff] [-n name] [ -k ] reads.fastq
 
 
 More information on the elements of the command:
@@ -116,10 +116,6 @@ working directory, the output directory, and the tarball of intermediate files.
 It's a good way to tell different runs apart, especially if the job number won't
 be printed (such as when the script is run without qsub).  The default is
 "GeIST". 
-
-* Use -g to enter an integer indicating the number of barcode groups.  This
-should be the same as the largest value in the second column of the barcode
-file.
 
 * The -k entry is optional.  By default, the script will remove unnecessary
 temporary files as it goes along.  If you would like to examine these temporary
