@@ -47,11 +47,21 @@ function test_variable
 	fi
 }
 
+
+function full_path ()
+{
+	DIR=`dirname $1`
+	FILE=`basename $1`
+	PATH="`cd \"$DIR\" 2>/dev/null && pwd -P || echo \"$DIR\"`/$FILE"
+	echo $PATH
+}
+
+
 # Get input via CLI
 print_usage()
 {
   cat <<EOF
-Usage: geist.sh [options] input.fastq
+Usage: geist.sh [options] input.[fastq | bam]
 	Options:
 	-b	bowtie index path (required)
 	-c	fragment count cutoff (default: 0)
@@ -106,17 +116,51 @@ do
     esac
 done
 shift $((OPTIND-1))
-fastq_file=$1
 
-test_variable $fastq_file
+# Make sure the input file exists & contains data:
+
+if test ! -f "$1"
+then echo "$1 doesn't exist!"
+  exit 1
+elif test ! -s "$1"
+then echo "$1 is empty!"
+  exit 1
+else
+  echo "$1 detected."
+fi
+
+# Copy the name of the input file, and change the extension to lowercase IF
+# it's a BAM file
+
+input_name=`echo $1 | perl -pe 's/\.bam$/.bam/i'`
+
+if [[ $input_name == *.bam ]]
+then
+	bam_file=`basename $1`
+	bam_path=`full_path $1`
+else
+	fastq_file=`basename $1`
+	fastq_path=`full_path $1`
+fi
+
+
 test_variable $bowtie_index
 test_variable $insert
 test_variable $barcode_ref
 
 
 
+# Identify the absolute paths  
+
+bowtie_index_path=`full_path $bowtie_index`
+
+barcode_ref_name=`basename $barcode_ref`
+barcode_ref_path=`full_path $barcode_ref`
+
+
+
 # Identify the number of barcode groups
-group_number=`awk 'BEGIN{n=1}{if($2 > n){n=$2}}END{print n}' ${barcode_ref}`
+group_number=`awk 'BEGIN{n=1}{if($2 > n){n=$2}}END{print n}' ${barcode_ref_path}`
 
 
 
@@ -125,6 +169,10 @@ group_number=`awk 'BEGIN{n=1}{if($2 > n){n=$2}}END{print n}' ${barcode_ref}`
 hash cutadapt 2>/dev/null || throw_error "cutadapt not found"
 hash bowtie 2>/dev/null || throw_error "bowtie not found"
 hash samtools 2>/dev/null || throw_error "samtools not found"
+if [[ $bam_file ]]
+then
+	hash bamtools 2>/dev/null || throw_error "bamtools not found (required for BAM -> FASTQ conversion)"
+fi
 
 # Verify that the programs to be called are of the correct version
 ver=`cutadapt --version`
@@ -145,19 +193,14 @@ ver=`samtools 2>&1 | head -3 | awk '/^Version/ {print $2}' | sed 's/^\(.*\)-.*$/
 echo "samtools is version $ver ( >= v. 0.1.19 is preferred)"
 ver=0
 
-
-
-# Make sure the fastq file exists & contains data:
-
-if test ! -f "$fastq_file"
-then echo "$fastq_file doesn't exist!"
-  exit 1
-elif test ! -s "$fastq_file"
-then echo "$fastq_file is empty!"
-  exit 1
-else
-  echo "$fastq_file detected."
+if [[ $bam_file ]]
+then
+	ver=`bamtools --version | head -2 | tail -1 | awk '{print $2}'`
+	echo "bamtools is version $ver ( >= v. 1.0.2 is preferred)"
+	ver=0
 fi
+
+
 
 # Set parameters for the indicated insert
 
@@ -222,10 +265,10 @@ echo "Entering working directory ${workdir}..."
 cd $workdir
 
 # Create a file of just the barcode sequences
-cut -f1 ../$barcode_ref > ${barcode_ref}_seq
+cut -f1 ${barcode_ref_path} > ${barcode_ref_name}_seq
 
 # Adjust for relative paths
-bowtie_index=`echo $bowtie_index | awk '{ if($1 ~ /^\//){print}else{print "../"$1} }'`
+# bowtie_index=`echo $bowtie_index | awk '{ if($1 ~ /^\//){print}else{print "../"$1} }'`
 
 # Check to make sure certain assumptions are met: for example, that the bowtie 
 # index you'll need actually exists, and is in the right place.
@@ -250,17 +293,35 @@ function verify_index
 }
 
 echo ""
-verify_index ${bowtie_index}.1.ebwt
-verify_index ${bowtie_index}.2.ebwt
-verify_index ${bowtie_index}.rev.1.ebwt
-verify_index ${bowtie_index}.rev.2.ebwt
+verify_index ${bowtie_index_path}.1.ebwt
+verify_index ${bowtie_index_path}.2.ebwt
+verify_index ${bowtie_index_path}.rev.1.ebwt
+verify_index ${bowtie_index_path}.rev.2.ebwt
 # .3.ebwt and .4.ebwt aren't used for single-end alignment, so it doesn't matter
 # if they're there.
 
 ################################################################################
 # Step 1.
-# Prior to running this script, use Bamtools (or similar) to convert a BAM file 
-# into FASTQ format.  Read names must end in /1 or /2.
+# If the input is a BAM file, use Bamtools to convert a BAM file into FASTQ
+# format.  Read names must end in /1 or /2.
+
+echo ""
+echo "***Step 1: Convert BAM to FASTQ, if applicable.***"
+
+if [[ $bam_file ]]
+then
+	fastq_file=`echo ${bam_file} | perl -pe 's/\.bam/.fastq/i'`
+	
+	bamtools convert -format fastq -in ${bam_path} -out ${fastq_file}
+	
+	test_file ${fastq_file}
+	
+	fastq_path=`full_path ${fastq_file}`
+else
+	echo "Input is not BAM, and is assumed to be FASTQ."
+fi
+
+
 
 ################################################################################
 # Step 2.
@@ -288,7 +349,7 @@ echo "***Step 2: Make initial cutadapt files.***"
 
 echo ""
 echo "Making reverse complement of input fastq file..."
-cat ../$fastq_file | ../perl/rcFastq.pl > revcom_${fastq_file}
+cat ${fastq_path} | ../perl/rcFastq.pl > revcom_${fastq_file}
 
 test_file revcom_${fastq_file}
 
@@ -401,7 +462,7 @@ rm revcom_${fastq_file}
 
 echo ""
 echo "Trimming linker_F barcodes.  Barcode grab.pl says:"
-perl ../perl/barcode_grab_v1.0.pl ${barcode_ref}_seq cut_linkerrevcom_${fastq_file}
+perl ../perl/barcode_grab_v1.0.pl ${barcode_ref_name}_seq cut_linkerrevcom_${fastq_file}
 
 test_file cut_linkerrevcom_${fastq_file}_bctrimmed.fastq
 
@@ -432,14 +493,14 @@ echo ""
 echo "Performing linker_R detection with cutadapt..."
 cutadapt \
  -a ATGCGCAGTCGACCACGC -q 3 -m 18 -O 10 -e 0 \
- --untrimmed-output=/dev/null -o cut_linker_R_withbc_${fastq_file} ../${fastq_file}
+ --untrimmed-output=/dev/null -o cut_linker_R_withbc_${fastq_file} ${fastq_path}
 
 # "withbc" means it hasn't had the barcodes trimmed off yet.
 test_file cut_linker_R_withbc_${fastq_file}
 
 echo ""
 echo "Trimming linker_R barcodes.  Barcode grab.pl says:"
-perl ../perl/barcode_grab_v1.0.pl ${barcode_ref}_seq cut_linker_R_withbc_${fastq_file}
+perl ../perl/barcode_grab_v1.0.pl ${barcode_ref_name}_seq cut_linker_R_withbc_${fastq_file}
 
 # Change file names
 mv cut_linker_R_withbc_${fastq_file}_bctrimmed.fastq cut_linker_R_${fastq_file}
@@ -518,13 +579,13 @@ then
    echo "Performing LTR_R+TTTG+GGGGCTC removal with cutadapt..."
    cutadapt -a GAGCCCCCAAATGAAAGACCCCCGCTGACGGGTAGTCAATCACTC -q 3 -m 11 -O 17 -e 0.05 \
      --untrimmed-output=noLTR_R-GGGGCTC_${fastq_file} \
-     -o /dev/null ../${fastq_file}
+     -o /dev/null ${fastq_path}
    
    test_file noLTR_R-GGGGCTC_${fastq_file}
    
    inputR=noLTR_R-GGGGCTC_${fastq_file}
 else
-   inputR=../${fastq_file}
+   inputR=${fastq_path}
 fi
 
 # Detect/trim actual LTR.
@@ -726,7 +787,7 @@ test_file cut_LTR_F_${fastq_file}_long.fastq_putative_linker_R
 # these don't need to be kept.
 echo ""
 echo "Trimming linker_R barcodes.  Barcode grab.pl says:"
-perl ../perl/barcode_grab_v1.0.pl ${barcode_ref}_seq \
+perl ../perl/barcode_grab_v1.0.pl ${barcode_ref_name}_seq \
  cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link_pairhaslink_rm-R-link_withbc.fastq
 
 test_file cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link_pairhaslink_rm-R-link_withbc.fastq_bctrimmed.fastq
@@ -849,7 +910,7 @@ cutadapt -a ATGCGCAGTCGACCACGC -q 3 -m 18 -O 1 -e 0 \
 
 echo ""
 echo "Trimming linker_R barcodes.  Barcode grab.pl says:"
-perl ../perl/barcode_grab_v1.0.pl ${barcode_ref}_seq cut_LTR_F_${fastq_file}_short.fastq_trim-R-link_withbc.fastq
+perl ../perl/barcode_grab_v1.0.pl ${barcode_ref_name}_seq cut_LTR_F_${fastq_file}_short.fastq_trim-R-link_withbc.fastq
 
 test_file cut_LTR_F_${fastq_file}_short.fastq_trim-R-link_withbc.fastq_bctrimmed.fastq
 
@@ -948,7 +1009,7 @@ test_file cut_revcom_cut_LTR_R_${fastq_file}_doubleoverlap_withbc.fastq
 
 echo ""
 echo "Trimming linker_F barcodes.  Barcode grab.pl says:"
-perl ../perl/barcode_grab_v1.0.pl ${barcode_ref}_seq cut_revcom_cut_LTR_R_${fastq_file}_doubleoverlap_withbc.fastq
+perl ../perl/barcode_grab_v1.0.pl ${barcode_ref_name}_seq cut_revcom_cut_LTR_R_${fastq_file}_doubleoverlap_withbc.fastq
 
 test_file cut_revcom_cut_LTR_R_${fastq_file}_doubleoverlap_withbc.fastq_bctrimmed.fastq
 
@@ -1024,7 +1085,7 @@ cat cut_LTR_F_${fastq_file}_long.fastq_no-bad-F-link_pairhaslink_rm-R-link.fastq
 echo ""
 echo "Grabbing pairs of LTR_F. fastq_get_pair_v1.0.pl says:"
 perl ../perl/fastq_get_pair_v1.0.pl ${fastq_file}_LTR_F_combo \
- ../$fastq_file
+ ${fastq_path}
 
 test_file ${fastq_file}_LTR_F_combo_pairs-with-p.fastq
 
@@ -1201,7 +1262,7 @@ rm revcom_${fastq_file}_LTR_F_combo_pairs-with-p_nolinkR_trimLTR-R_noLTRF.fastq
 
 echo ""
 echo "Trimming linker_F barcodes.  Barcode grab.pl says:"
-perl ../perl/barcode_grab_v1.0.pl ${barcode_ref}_seq \
+perl ../perl/barcode_grab_v1.0.pl ${barcode_ref_name}_seq \
  revcom_${fastq_file}_LTR_F_combo_p_trim_withbc.fastq
 
 test_file revcom_${fastq_file}_LTR_F_combo_p_trim_withbc.fastq_bctrimmed.fastq
@@ -1245,7 +1306,7 @@ echo "***Step 10. Make non-q pairs of LTR_R reads.***"
 echo ""
 echo "Grabbing pairs of LTR_R. fastq_get_pair_v1.0.pl says:"
 perl ../perl/fastq_get_pair_v1.0.pl \
- cut_LTR_R_${fastq_file}_overlap_trim-F-link.fastq ../$fastq_file
+ cut_LTR_R_${fastq_file}_overlap_trim-F-link.fastq ${fastq_path}
 
 test_file cut_LTR_R_${fastq_file}_overlap_trim-F-link.fastq_pairs-with-p.fastq
 
@@ -1414,7 +1475,7 @@ test_file ${fastq_file}_LTR_R_p_trim_putative_linker_R
 
 echo ""
 echo "Trimming linker_R barcodes.  Barcode grab.pl says:"
-perl ../perl/barcode_grab_v1.0.pl ${barcode_ref}_seq \
+perl ../perl/barcode_grab_v1.0.pl ${barcode_ref_name}_seq \
  ${fastq_file}_LTR_R_p_trim_withbc.fastq
 
 test_file ${fastq_file}_LTR_R_p_trim_withbc.fastq_bctrimmed.fastq
@@ -1518,9 +1579,9 @@ echo "***Step 12. Align -q and non-q reads with bowtie.***"
 # memory for Bowtie, and -t reports timing statistics.
 
 echo ""
-echo "Aligning non-p reads to ${bowtie_index}..."
+echo "Aligning non-p reads to ${bowtie_index_path}..."
 echo "Bowtie says:"
-bowtie -t -a -m 1 --best --strata --chunkmbs 256 --sam ${bowtie_index} \
+bowtie -t -a -m 1 --best --strata --chunkmbs 256 --sam ${bowtie_index_path} \
  ${fastq_file}_non-p ${fastq_file}_non-p_bowtie_strata.sam
 
 echo ""
@@ -1546,9 +1607,9 @@ if [ "$keep" = "off" ]; then rm ${fastq_file}_non-p_bowtie_strata.sam; fi
 
 # Repeat for the p-pairs file.
 echo ""
-echo "Aligning p-reads to ${bowtie_index}..."
+echo "Aligning p-reads to ${bowtie_index_path}..."
 echo "Bowtie says:"
-bowtie -t -a -m 1 --best --strata --chunkmbs 256 --sam ${bowtie_index} \
+bowtie -t -a -m 1 --best --strata --chunkmbs 256 --sam ${bowtie_index_path} \
  ${fastq_file}_p ${fastq_file}_p_bowtie_strata.sam
 
 echo ""
@@ -1740,7 +1801,7 @@ test_file ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadj
 ################################################################################
 # Step 16.
 # Split the fragments into groups, according their barcode. The file
-# ${barcode_ref}_seq is used to accomplish this.
+# ${barcode_ref_name}_seq is used to accomplish this.
 
 # The default files split the reads into four groups, corresponding to the four
 # T75 flasks in which the cells were initially transfected with MLV.
@@ -1756,7 +1817,7 @@ echo "Adding barcode information."
 echo "barcode_whittle_and_count_sam.pl says:"
 perl ../perl/barcode_whittle_and_count_sam.pl \
  ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent_sort_singlefrag \
- ${fastq_file}_barcodes_cat.fastq ${barcode_ref}_seq
+ ${fastq_file}_barcodes_cat.fastq ${barcode_ref_name}_seq
 
 echo ""
 test_file ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpair_consistentbc_LTRadjacent_sort_singlefrag_barcodes
@@ -1783,7 +1844,7 @@ if [ "$keep" = "off" ]; then rm ${fastq_file}_p-pairs_bowtie_strata_sort_nofarpa
 echo ""
 echo "Adding barcode group information."
 echo "bowtie_barcode-group_sam.pl says:"
-perl ../perl/bowtie_barcode-group_sam.pl ../${barcode_ref} \
+perl ../perl/bowtie_barcode-group_sam.pl ${barcode_ref_path} \
  ${fastq_file}_combo_split
 
 echo ""
@@ -1932,7 +1993,7 @@ echo "Adding barcode information."
 echo "barcode_whittle_and_count_sam.pl says:"
 perl ../perl/barcode_whittle_and_count_sam.pl \
  ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island \
- ${fastq_file}_barcodes_cat.fastq ${barcode_ref}_seq
+ ${fastq_file}_barcodes_cat.fastq ${barcode_ref_name}_seq
  
 echo ""
 test_file ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes
@@ -1956,7 +2017,7 @@ rm ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cut
 
 echo "bowtie_barcode-group_sam.pl says:"
 perl ../perl/bowtie_barcode-group_sam.pl \
- ../${barcode_ref} \
+ ${barcode_ref_path} \
  ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort 
 
 echo ""
@@ -2059,13 +2120,13 @@ cat ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cu
 
 test_file ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_job${JOB_ID}_demibed
 
-sort -k1,1 ../${barcode_ref} > ${barcode_ref}_barsort
+sort -k1,1 ${barcode_ref_path} > ${barcode_ref_name}_barsort
 
-test_file ${barcode_ref}_barsort
+test_file ${barcode_ref_name}_barsort
 
 
 join -1 4 -2 1 ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_job${JOB_ID}_demibed \
-  ${barcode_ref}_barsort \
+  ${barcode_ref_name}_barsort \
   | awk -v OFS="\t" '{print $2,$3-1,$4,$6"_"$7"_"$8"_"$9}' | sort | uniq \
   | awk -v footprint="$footprint" '{print $1"\t"$2"\t"$2+footprint"\t"$4"\t0\t"$3"\t"$2"\t"$2+footprint}' \
   | sort -k1,1 -k2,2n \
@@ -2077,7 +2138,7 @@ echo ""
 test_file ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_${insert}_job${JOB_ID}.bed
 
 if [ "$keep" = "off" ]; then rm ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_job${JOB_ID}_demibed; fi
-if [ "$keep" = "off" ]; then rm ${barcode_ref}_barsort; fi
+if [ "$keep" = "off" ]; then rm ${barcode_ref_name}_barsort; fi
 
 
 ################################################################################
