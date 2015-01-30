@@ -4,8 +4,8 @@ GeIST
 GeIST (Genomic Integration Site Tracker) provides the scripts used to identify
 integration sites from the assay described in Varshney et al. 2013
 (http://dx.doi.org/10.1101/gr.151464.112) and LaFave et al. 2014
-(http://dx.doi.org/10.1093/nar/gkt1399). GeIST is capable of identifying
-integrations from MLV, AAV, Tol2, or Ds-based vectors.
+(http://dx.doi.org/10.1093/nar/gkt1399). GeIST is currently capable of
+identifying integrations from MLV, AAV, Tol2, or Ds-based vectors.
 
 Note that the version of the assay used in LaFave et al. 2014 involved mixing
 the barcodes in such a way as to be able to identify multiple integrations in
@@ -24,6 +24,7 @@ Requirements
 * cutadapt version 1.3
 * bowtie version 1.0.0, along with the relevant index
 * samtools version 0.1.19
+* bamtools version 1.0.2, if starting with a BAM instead of a FASTQ file
 * Sufficient RAM to load indexes/hold intermediate values in memory (many of
 	the perl scripts store the contents of large files in hashes).  32 GB of
 	RAM should be sufficient when analyzing a 50 GB input file.
@@ -37,8 +38,8 @@ Running the script
 ==========
 
 There is a single main shell script, geist.sh, that executes the workflow.  It
-starts with a FASTQ file of sequencing reads, and ends with a BAM of aligned,
-trimmed reads and a BED file of integration locations.  
+starts with either a FASTQ or BAM file of sequencing reads, and ends with a BAM
+of aligned, trimmed reads and a BED file of integration locations.  
 
 The script was developed to be run on an SGE cluster; as such, it can be 
 submitted using 'qsub', but doing so it not required.  Output files will have 
@@ -48,7 +49,7 @@ used, that part of the name will remain blank.
 Run the program with the following command (should be run from within the 
 GeIST directory):
 
-qsub -l mem_free=32G geist.sh [ -v ] -r barcodes -b index -i insert [-c cutoff] [-n name] [ -k ] reads.fastq
+qsub -l mem_free=32G geist.sh [ -v ] -r barcodes -b index -i insert [-c cutoff] [-n name] [ -k ] reads.[fastq | bam]
 
 
 More information on the elements of the command:
@@ -58,9 +59,13 @@ isn't required, but it may be helpful to request a large amount of memory
 when working with a large FASTQ file.  For a 50 GB FASTQ file, I suggest 
 requesting 32 GB of memory, if available.
 
+* Any files specified in the command - such as the bowtie index, the barcode
+file, or the input sequences - can be specified as either relative or absolute
+paths.
+
 * After specifying the name of the shell script, the order in which the
 remaining files are entered is not important, with the exception that the input
-FASTQ file must be listed last.
+FASTQ or BAM file must be listed last.
 
 * If '-v' is used, GeIST will print the current version number to standard
 output and exit.
@@ -101,8 +106,7 @@ listed.  The file must be of the following format:
 
 * Use the -b option to enter the path to the Bowtie index to be used, ending
 with the basename of the index.  The basename is the portion of the name common
-to all six index files (the part that comes before the first period). This
-argument accepts relative or absolute paths.
+to all six index files (the part that comes before the first period). 
 
 * Use the -i option enter which type of integration you want to detect.  The
 four options are mlv, aav, tol2, and ds.
@@ -121,21 +125,25 @@ be printed (such as when the script is run without qsub).  The default is
 temporary files as it goes along.  If you would like to examine these temporary
 files (for example, to see how the final output was derived), use -k.
 
-* The last file should be the FASTQ file.  This file should
-be moved into the GeIST/ directory prior to running the program.
+* The last file should be either a BAM file or a FASTQ file.  If a BAM file is
+submitted, it is automatically converted to a FASTQ file.
 
 
 The script will create a working directory into which it will create the
-intermediate files.  The fastq file and barcode file remain in the parent GeIST
-directory; they should remain in this directory for the duration of the run of
-the program.  When the script is finished, relevant files are moved to an
-Output directory, and the working directory is deleted.
+intermediate files.  The fastq (or BAM) file and the barcode file are not
+copied into the working directory. As such, they should remain in the same
+directory for the duration of the run of the program.  When the script is
+finished, relevant files are moved to an Output directory, and the working
+directory is deleted.
 
 
 Testing the script
 ==========
 
 qsub -l mem_free=2.5G geist.sh -r BC1-9_barcodes+G_4_groups_example -b ~/indexes/hg19 -i mlv -n example -k script_test.fastq
+
+script_test.bam can be used in place of script_test.fastq, and should produce
+identical results.
 
 The above assumes that you're using a human genome index with basename "hg19",
 such as the one available from the bowtie website at
@@ -144,7 +152,7 @@ directory in this example is located in the $HOME directory, but that doesn't
 have to be the case.
 
 These settings will identify MLV integrations in the human genome, based on a
-few reads in script_test.fastq.  It uses a fragment cutoff of 0.  The expected
+few reads in script_test.fastq or script_test.bam.  It uses a fragment cutoff of 0.  The expected
 output can be found in the Output_expected/ directory.
 
 
@@ -153,12 +161,12 @@ Understanding the output
 
 The main output file will have the form 
 ${fastq_file}_1-${group_number}-grouped_not-in-5_cutoff${cutoff}_${insert}_job${JOB_ID}.bed.  
-The name indicates the FASTQ file submitted, the number of barcode groups used, that
+The name indicates the file submitted, the number of barcode groups used, that
 integrations within 5 bp of another integration with more reads were removed,
-the cutoff used, the type of integration detected, and the job number (if qsub was used to submit the script).
-The format is that of a typical BED file.  The first line is a track header,
-useful if you want to examine the output on the UCSC genome browser.  The
-columns are as follows:
+the cutoff used, the type of integration detected, and the job number (if qsub
+was used to submit the script). The format is that of a typical BED file.  The
+first line is a track header, useful if you want to examine the output on the
+UCSC genome browser.  The columns are as follows:
 
 Column 1: Chromosome name
 Column 2: Start position (0-based)
@@ -174,9 +182,13 @@ Column 8: thickEnd.  Only used for visualization purposes.
 Information on the individual reads can be found in 
 ${fastq_file}_combo_split_grouped_uniq_1-${group_number}.not_in_5_cutoff${cutoff}_island_barcodes_sort_grouped_job${JOB_ID}_header.bam.  
 Note that this file only contains the reads in which part of the integration
-itself (the "LTR") was detected.  This BAM file can be converted to SAM format
-by using `samtools view`. The first fourteen columns are standard SAM entries. 
-The final four columns contain information specific to the assay:
+itself (the "LTR") was detected.  While not all of the elements detected by
+GeIST have long terminal repeats, "LTR" is used throughout the code as
+shorthand for the amplified portion of the end of the integrated element. 
+
+This BAM file can be converted to SAM format by using `samtools view`. The
+first fourteen columns are standard SAM entries. The final four columns contain
+information specific to the assay:
 	
 	* XO: Indicates the orientation of the integration, relative to the end
 	used for sequencing.  For a given fragment, both read /1 and read /2 will
